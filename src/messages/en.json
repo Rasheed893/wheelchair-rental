@@ -1,0 +1,38 @@
+{
+  "nav": {
+    "browse": "Browse Wheelchairs",
+    "myBookings": "My Bookings",
+    "admin": "Admin",
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout",
+    "dashboard": "Dashboard",
+    "adminPanel": "Admin Panel"
+  },
+  "home": {
+    "hero_title": "Wheelchair Rental Made Easy",
+    "hero_subtitle": "Book your wheelchair in minutes. Wide selection, competitive prices.",
+    "browse_cta": "Browse Wheelchairs",
+    "register_cta": "Get Started",
+    "featured": "Featured Wheelchairs",
+    "view_all": "View all"
+  },
+  "booking": {
+    "select_dates": "Select Rental Dates",
+    "start": "Start Date",
+    "end": "End Date",
+    "duration": "Duration",
+    "total": "Total Price",
+    "summary": "Booking Summary",
+    "confirm": "Confirm & Pay",
+    "days": "days",
+    "day": "day"
+  },
+  "status": {
+    "PENDING": "Pending Payment",
+    "CONFIRMED": "Confirmed",
+    "CANCELLED": "Cancelled",
+    "COMPLETED": "Completed",
+    "EXPIRED": "Expired"
+  }
+}
