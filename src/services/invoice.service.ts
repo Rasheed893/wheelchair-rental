@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import type { Invoice } from "@prisma/client";
+import { VAT_RATE, calculateTax, calculateTotal, roundCurrency } from "@/lib/pricing";
 
 const CURRENCY = "aed";
 
 export class InvoiceService {
-  private readonly TAX_RATE = 0.15;
+  private readonly TAX_RATE = VAT_RATE;
 
   async generate(bookingId: string, userId: string): Promise<Invoice> {
     const existing = await prisma.invoice.findUnique({ where: { bookingId } });
@@ -12,14 +13,22 @@ export class InvoiceService {
 
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { wheelchair: true },
+      include: { wheelchair: true, payment: true },
     });
     if (!booking) throw new Error("Booking not found");
 
     const invoiceNumber = await this.getNextInvoiceNumber();
-    const subtotal = Number(booking.totalPrice);
-    const taxAmount = parseFloat((subtotal * this.TAX_RATE).toFixed(2));
-    const totalAmount = parseFloat((subtotal + taxAmount).toFixed(2));
+    const subtotal = roundCurrency(Number(booking.totalPrice));
+    const expectedTaxAmount = calculateTax(subtotal, this.TAX_RATE);
+    const expectedTotalAmount = calculateTotal(subtotal, this.TAX_RATE);
+    const chargedTotal =
+      booking.paymentStatus === "PAID" && booking.payment?.amount
+        ? roundCurrency(Number(booking.payment.amount))
+        : expectedTotalAmount;
+    const taxAmount = roundCurrency(
+      Math.max(chargedTotal - subtotal, expectedTaxAmount),
+    );
+    const totalAmount = chargedTotal;
 
     const invoice = await prisma.invoice.create({
       data: {

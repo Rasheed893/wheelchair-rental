@@ -1,14 +1,16 @@
 // src/app/[locale]/dashboard/bookings/[id]/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import type { BookingWithRelations } from "@/types";
+import { formatAED } from "@/lib/currency";
+import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
 
 interface Props {
-  params: { locale: string; id: string };
+  params: Promise<{ locale: string; id: string }>;
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -21,13 +23,11 @@ const STATUS_BADGE: Record<string, string> = {
 
 const PAY_STATUS: Record<string, string> = {
   PENDING: "badge-yellow",
-  SUCCEEDED: "badge-green",
-  FAILED: "badge-red",
-  REFUNDED: "badge-gray",
+  PAID: "badge-green",
 };
 
 export default function BookingDetailPage({ params }: Props) {
-  const { locale, id } = params;
+  const { locale, id } = use(params);
   const isAr = locale === "ar";
   const router = useRouter();
 
@@ -35,6 +35,7 @@ export default function BookingDetailPage({ params }: Props) {
   const [invoice, setInvoice] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const [supportPhone, setSupportPhone] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -46,6 +47,19 @@ export default function BookingDetailPage({ params }: Props) {
       setLoading(false);
     });
   }, [id]);
+
+  useEffect(() => {
+    fetch("/api/config/support-phone")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && typeof data.data?.supportPhone === "string") {
+          setSupportPhone(data.data.supportPhone);
+        }
+      })
+      .catch(() => {
+        setSupportPhone("");
+      });
+  }, []);
 
   async function handleCancel() {
     if (!confirm(isAr ? "هل أنت متأكد؟" : "Are you sure you want to cancel?"))
@@ -90,7 +104,12 @@ export default function BookingDetailPage({ params }: Props) {
 
   const name = isAr ? booking.wheelchair.nameAr : booking.wheelchair.name;
   const canCancel = ["PENDING", "CONFIRMED"].includes(booking.status);
-  const isPending = booking.status === "PENDING";
+  const isPending = booking.status === "PENDING" && booking.paymentMethod === "ONLINE";
+  const subtotal = Number(invoice?.subtotal ?? booking.totalPrice);
+  const taxAmount = Number(invoice?.taxAmount ?? calculateTax(subtotal, VAT_RATE));
+  const totalAmount = Number(
+    invoice?.totalAmount ?? booking.payment?.amount ?? calculateTotal(subtotal, VAT_RATE),
+  );
 
   return (
     <div className="page-container py-10">
@@ -192,31 +211,31 @@ export default function BookingDetailPage({ params }: Props) {
                     {isAr ? "السعر اليومي" : "Daily Rate"}
                   </p>
                   <p className="font-semibold text-slate-900 text-sm">
-                    ${Number(booking.wheelchair.pricePerDay).toFixed(2)}/
+                    {formatAED(Number(booking.wheelchair.pricePerDay))}/
                     {isAr ? "يوم" : "day"}
                   </p>
                 </div>
               </div>
 
-              {booking.notes && (
+              {booking.deliveryNotes && (
                 <div className="mt-4 p-3 bg-blue-50 rounded-xl">
                   <p className="text-xs text-blue-600 font-medium mb-1">
-                    {isAr ? "ملاحظات" : "Notes"}
+                    {isAr ? "ملاحظات التوصيل" : "Delivery Notes"}
                   </p>
-                  <p className="text-sm text-blue-800">{booking.notes}</p>
+                  <p className="text-sm text-blue-800">{booking.deliveryNotes}</p>
                 </div>
               )}
 
-              {booking.deliveryAddress && (
-                <div className="mt-3 p-3 bg-slate-50 rounded-xl">
-                  <p className="text-xs text-slate-500 font-medium mb-1">
-                    📍 {isAr ? "عنوان التوصيل" : "Delivery Address"}
-                  </p>
-                  <p className="text-sm text-slate-700">
-                    {booking.deliveryAddress}
-                  </p>
-                </div>
-              )}
+              <div className="mt-3 p-3 bg-slate-50 rounded-xl">
+                <p className="text-xs text-slate-500 font-medium mb-1">
+                  📞 {isAr ? "الهاتف" : "Phone"}
+                </p>
+                <p className="text-sm text-slate-700">{booking.phoneNumber}</p>
+                <p className="mt-3 text-xs text-slate-500 font-medium mb-1">
+                  📍 {isAr ? "عنوان التوصيل" : "Delivery Address"}
+                </p>
+                <p className="text-sm text-slate-700">{booking.deliveryAddress}</p>
+              </div>
 
               {booking.cancelledAt && (
                 <div className="mt-4 p-3 bg-red-50 rounded-xl">
@@ -227,6 +246,14 @@ export default function BookingDetailPage({ params }: Props) {
                     {format(new Date(booking.cancelledAt), "MMM d, yyyy")}
                     {booking.cancelReason && ` — ${booking.cancelReason}`}
                   </p>
+                  {supportPhone && (
+                    <p className="text-sm text-red-800 mt-2">
+                      {isAr ? "للمساعدة اتصل على: " : "Need help? Call: "}
+                      <a className="underline font-semibold" href={`tel:${supportPhone}`}>
+                        {supportPhone}
+                      </a>
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -251,58 +278,84 @@ export default function BookingDetailPage({ params }: Props) {
             </div>
 
             {/* Payment info */}
-            {booking.payment && (
-              <div className="card p-6">
-                <h2 className="font-semibold text-slate-900 mb-4">
-                  💳 {isAr ? "معلومات الدفع" : "Payment Info"}
-                </h2>
-                <div className="space-y-2 text-sm">
+            <div className="card p-6">
+              <h2 className="font-semibold text-slate-900 mb-4">
+                💳 {isAr ? "معلومات الدفع" : "Payment Info"}
+              </h2>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">
+                    {isAr ? "طريقة الدفع" : "Method"}
+                  </span>
+                  <span>{booking.paymentMethod === "CASH" ? "Cash on Delivery" : "Online (Stripe)"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">
+                    {isAr ? "الحالة" : "Payment Status"}
+                  </span>
+                  <span className={PAY_STATUS[booking.paymentStatus]}>
+                    {booking.paymentStatus === "PAID"
+                      ? isAr
+                        ? "🟢 مدفوع"
+                        : "🟢 Paid"
+                      : booking.paymentMethod === "CASH"
+                        ? isAr
+                          ? "🟡 معلق (الدفع عند الاستلام)"
+                          : "🟡 Pending (Cash on Delivery)"
+                        : isAr
+                          ? "🟡 بانتظار الدفع"
+                          : "🟡 Pending"}
+                  </span>
+                </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">
-                      {isAr ? "الحالة" : "Status"}
+                      {isAr ? "المبلغ الأساسي" : "Subtotal"}
                     </span>
-                    <span className={PAY_STATUS[booking.payment.status]}>
-                      {booking.payment.status}
-                    </span>
+                    <span className="font-semibold">{formatAED(subtotal)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">
-                      {isAr ? "المبلغ" : "Amount"}
+                      {isAr
+                        ? `ضريبة (${(VAT_RATE * 100).toFixed(0)}%)`
+                        : `Tax (${(VAT_RATE * 100).toFixed(0)}%)`}
                     </span>
-                    <span className="font-semibold">
-                      ${Number(booking.payment.amount).toFixed(2)}
-                    </span>
+                    <span>{formatAED(taxAmount)}</span>
                   </div>
-                  {booking.payment.paidAt && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{isAr ? "الإجمالي" : "Total"}</span>
+                    <span className="font-semibold">{formatAED(totalAmount)}</span>
+                  </div>
+                  {booking.paidAt && (
                     <div className="flex justify-between">
                       <span className="text-slate-500">
                         {isAr ? "تاريخ الدفع" : "Paid At"}
                       </span>
                       <span>
                         {format(
-                          new Date(booking.payment.paidAt),
+                          new Date(booking.paidAt),
                           "MMM d, yyyy HH:mm",
                         )}
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-between">
+                  {booking.payment?.stripePaymentIntentId && (
+                    <div className="flex justify-between">
                     <span className="text-slate-500">
                       {isAr ? "مرجع Stripe" : "Stripe Ref"}
                     </span>
                     <span className="font-mono text-xs text-slate-400">
                       {booking.payment.stripePaymentIntentId.slice(-12)}
                     </span>
-                  </div>
-                </div>
+                    </div>
+                  )}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Sidebar: Invoice */}
           <div className="space-y-5">
             {invoice ? (
-              <div className="card p-5">
+              <div id="invoice" className="card p-5">
                 <h2 className="font-semibold text-slate-900 mb-4">
                   🧾 {isAr ? "الفاتورة" : "Invoice"}
                 </h2>
@@ -319,7 +372,7 @@ export default function BookingDetailPage({ params }: Props) {
                     <span className="text-slate-500">
                       {isAr ? "المبلغ الأساسي" : "Subtotal"}
                     </span>
-                    <span>${Number(invoice.subtotal).toFixed(2)}</span>
+                    <span>{formatAED(Number(invoice.subtotal))}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">
@@ -327,13 +380,25 @@ export default function BookingDetailPage({ params }: Props) {
                         ? `ضريبة (${(Number(invoice.taxRate) * 100).toFixed(0)}%)`
                         : `Tax (${(Number(invoice.taxRate) * 100).toFixed(0)}%)`}
                     </span>
-                    <span>${Number(invoice.taxAmount).toFixed(2)}</span>
+                    <span>{formatAED(Number(invoice.taxAmount))}</span>
                   </div>
                   <hr className="border-slate-100 my-1" />
                   <div className="flex justify-between font-bold">
                     <span>{isAr ? "الإجمالي" : "Total"}</span>
-                    <span className="text-primary-700">
-                      ${Number(invoice.totalAmount).toFixed(2)}
+                    <span className="text-primary-700">{formatAED(Number(invoice.totalAmount))}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{isAr ? "طريقة الدفع" : "Payment Method"}</span>
+                    <span>{booking.paymentMethod === "CASH" ? "Cash on Delivery" : "Online (Stripe)"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{isAr ? "حالة الدفع" : "Payment Status"}</span>
+                    <span>
+                      {booking.paymentStatus === "PAID"
+                        ? "Paid"
+                        : booking.paymentMethod === "CASH"
+                          ? "Unpaid (Cash on Delivery)"
+                          : "Pending"}
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 text-center pt-1">

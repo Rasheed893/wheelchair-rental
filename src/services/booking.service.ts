@@ -7,6 +7,8 @@ import type {
 } from "@/types";
 import type { CreateBookingInput } from "@/validators/booking.validator";
 import { wheelchairService } from "./wheelchair.service";
+import { invoiceService } from "./invoice.service";
+import { sendBookingConfirmationEmail } from "@/lib/emails/send-booking-confirmation-email";
 
 export class BookingService {
   async create(
@@ -49,16 +51,47 @@ export class BookingService {
         endDate,
         totalDays: days,
         totalPrice,
-        status: "PENDING",
-        notes: input.notes,
+        status: input.paymentMethod === "CASH" ? "CONFIRMED" : "PENDING",
+        phoneNumber: input.phoneNumber,
         deliveryAddress: input.deliveryAddress,
+        deliveryNotes: input.deliveryNotes,
+        paymentMethod: input.paymentMethod,
+        paymentStatus: "PENDING",
+        paidAt: null,
       },
       include: {
+        user: { select: { id: true, name: true, email: true } },
         wheelchair: true,
         payment: true,
         invoice: true,
       },
     });
+
+    if (input.fullName !== booking.user.name) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { name: input.fullName },
+      });
+      booking.user.name = input.fullName;
+    }
+
+    if (input.paymentMethod === "CASH") {
+      await invoiceService.generate(booking.id, userId);
+      await sendBookingConfirmationEmail({
+        to: booking.user.email,
+        customerName: input.fullName,
+        phoneNumber: booking.phoneNumber,
+        deliveryAddress: booking.deliveryAddress,
+        deliveryNotes: booking.deliveryNotes ?? undefined,
+        wheelchairName: booking.wheelchair.name,
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        subtotal: Number(booking.totalPrice),
+        bookingId: booking.id,
+        paymentMethod: "CASH",
+        paymentStatus: "PENDING",
+      });
+    }
 
     return booking as BookingWithRelations;
   }

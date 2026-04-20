@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import type { BookingWithRelations } from "@/types";
+import { formatAED } from "@/lib/currency";
 
 interface Props {
   booking: BookingWithRelations;
@@ -33,6 +34,18 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
   const statusLabel =
     STATUS_LABEL[booking.status]?.[isAr ? "ar" : "en"] ?? booking.status;
   const canCancel = ["PENDING", "CONFIRMED"].includes(booking.status);
+  const paymentStatusLabel =
+    booking.paymentStatus === "PAID"
+      ? isAr
+        ? "🟢 مدفوع"
+        : "🟢 Paid"
+      : booking.paymentMethod === "CASH"
+        ? isAr
+          ? "🟡 معلق (الدفع عند الاستلام)"
+          : "🟡 Pending (Cash on Delivery)"
+        : isAr
+          ? "🟡 بانتظار الدفع"
+          : "🟡 Pending";
 
   return (
     <div className="card p-5 animate-slide-up">
@@ -67,12 +80,13 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
             {isAr ? "رقم الحجز:" : "Booking #"}
             {booking.id.slice(-8).toUpperCase()}
           </p>
+          <p className="text-slate-500 text-xs mt-1">{paymentStatusLabel}</p>
         </div>
 
         {/* Price */}
         <div className="text-right shrink-0">
           <div className="text-xl font-bold text-slate-900">
-            ${Number(booking.totalPrice).toFixed(2)}
+            {formatAED(Number(booking.totalPrice))}
           </div>
           <div className="text-xs text-slate-400 mt-0.5">
             {isAr ? "إجمالي" : "total"}
@@ -89,7 +103,7 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
           {isAr ? "التفاصيل" : "View Details"}
         </Link>
 
-        {booking.status === "PENDING" && (
+        {booking.status === "PENDING" && booking.paymentMethod === "ONLINE" && (
           <Link
             href={`/${locale}/wheelchairs/${booking.wheelchairId}/book?bookingId=${booking.id}`}
             className="btn-primary py-1.5 px-3 text-xs"
@@ -100,9 +114,8 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
 
         {booking.invoice && (
           <Link
-            href={`/api/bookings/${booking.id}/invoice`}
+            href={`/${locale}/dashboard/bookings/${booking.id}#invoice`}
             className="btn-outline py-1.5 px-3 text-xs"
-            target="_blank"
           >
             {isAr ? "عرض الفاتورة" : "View Invoice"}
           </Link>

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { formatAED } from "@/lib/currency";
 
 // interface Props {
 //   params: { locale: string; id: string };
@@ -77,6 +78,7 @@ export default async function WheelchairDetailPage({ params }: Props) {
                 src={wheelchair.images[0]}
                 alt={name}
                 fill
+                sizes="(max-width: 1024px) 100vw, 50vw"
                 className="object-cover"
               />
             ) : (
@@ -96,6 +98,7 @@ export default async function WheelchairDetailPage({ params }: Props) {
                     src={img}
                     alt={`${name} ${i + 2}`}
                     fill
+                    sizes="(max-width: 1024px) 25vw, 12vw"
                     className="object-cover"
                   />
                 </div>
@@ -177,7 +180,7 @@ export default async function WheelchairDetailPage({ params }: Props) {
           <div className="card p-5 mt-6">
             <div className="flex items-baseline gap-2 mb-4">
               <span className="text-4xl font-bold text-slate-900">
-                ${Number(wheelchair.pricePerDay).toFixed(2)}
+                {formatAED(Number(wheelchair.pricePerDay))}
               </span>
               <span className="text-slate-400">/ {isAr ? "يوم" : "day"}</span>
             </div>

@@ -1,7 +1,6 @@
 // src/types/index.ts
 
 import type {
-  User,
   Wheelchair,
   Booking,
   Payment,
@@ -88,7 +87,16 @@ export type WheelchairPublic = Pick<
 // ─────────────────────────────────────────────
 // Booking
 // ─────────────────────────────────────────────
-export type BookingWithRelations = Booking & {
+type BookingPaymentFields = {
+  phoneNumber: string;
+  deliveryAddress: string;
+  deliveryNotes?: string | null;
+  paymentMethod: "ONLINE" | "CASH";
+  paymentStatus: "PENDING" | "PAID";
+  paidAt?: Date | null;
+};
+
+export type BookingWithRelations = Booking & BookingPaymentFields & {
   wheelchair: WheelchairPublic;
   payment?: Payment | null;
   invoice?: Invoice | null;
@@ -98,8 +106,11 @@ export interface BookingCreateInput {
   wheelchairId: string;
   startDate: string; // ISO date string
   endDate: string;
-  notes?: string;
-  deliveryAddress?: string;
+  fullName: string;
+  phoneNumber: string;
+  deliveryAddress: string;
+  deliveryNotes?: string;
+  paymentMethod: "ONLINE" | "CASH";
 }
 
 export interface AvailabilityResponse {

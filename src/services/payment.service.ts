@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import type { PaymentIntentResponse } from "@/types";
 import { invoiceService } from "./invoice.service";
-import { sendBookingConfirmationEmail } from "@/lib/emails/send-booking-confirmation-email";
+import {
+  sendBookingConfirmationEmail,
+  sendCashPaymentReceivedEmail,
+} from "@/lib/emails/send-booking-confirmation-email";
+import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
 
 const CURRENCY = "aed";
 
@@ -13,6 +17,47 @@ function toJson<T>(value: T) {
 }
 
 export class PaymentService {
+  async confirmPaymentIntentForUser(
+    paymentIntentId: string,
+    userId: string,
+    expectedBookingId?: string,
+  ): Promise<{ processed: boolean; reason?: string; bookingId?: string }> {
+    const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    const bookingId = intent.metadata?.bookingId;
+    if (!bookingId) {
+      return { processed: false, reason: "Missing bookingId metadata" };
+    }
+
+    if (expectedBookingId && expectedBookingId !== bookingId) {
+      return { processed: false, reason: "Booking ID mismatch", bookingId };
+    }
+
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { id: true, userId: true, status: true },
+    });
+
+    if (!booking) {
+      return { processed: false, reason: "Booking not found", bookingId };
+    }
+
+    if (booking.userId !== userId) {
+      return { processed: false, reason: "Forbidden", bookingId };
+    }
+
+    if (intent.status !== "succeeded") {
+      return {
+        processed: false,
+        reason: `PaymentIntent status is ${intent.status}`,
+        bookingId,
+      };
+    }
+
+    await this.onPaymentSucceeded(intent);
+    return { processed: true, bookingId };
+  }
+
   async createIntent(
     bookingId: string,
     userId: string,
@@ -26,6 +71,14 @@ export class PaymentService {
     if (booking.status !== "PENDING") {
       throw new Error("Booking is not in a pending state");
     }
+    if (booking.paymentMethod !== "ONLINE") {
+      throw new Error("Stripe payment is only available for ONLINE bookings");
+    }
+
+    const subtotal = Number(booking.totalPrice);
+    const taxAmount = calculateTax(subtotal);
+    const totalAmount = calculateTotal(subtotal);
+    const amountInMinorUnit = Math.round(totalAmount * 100);
 
     if (
       booking.payment?.stripePaymentIntentId &&
@@ -34,16 +87,15 @@ export class PaymentService {
       const existingIntent = await stripe.paymentIntents.retrieve(
         booking.payment.stripePaymentIntentId,
       );
-
-      return {
-        clientSecret: existingIntent.client_secret!,
-        paymentIntentId: existingIntent.id,
-        amount: existingIntent.amount,
-        currency: existingIntent.currency,
-      };
+      if (existingIntent.amount === amountInMinorUnit) {
+        return {
+          clientSecret: existingIntent.client_secret!,
+          paymentIntentId: existingIntent.id,
+          amount: existingIntent.amount,
+          currency: existingIntent.currency,
+        };
+      }
     }
-
-    const amountInMinorUnit = Math.round(Number(booking.totalPrice) * 100);
 
     console.log("[CREATE INTENT] Booking from DB:", {
       id: booking.id,
@@ -64,8 +116,12 @@ export class PaymentService {
         bookingId: booking.id,
         userId,
         wheelchairId: booking.wheelchairId,
+        taxRate: String(VAT_RATE),
+        subtotal: subtotal.toFixed(2),
+        taxAmount: taxAmount.toFixed(2),
+        totalAmount: totalAmount.toFixed(2),
       },
-      description: `Wheelchair rental: ${booking.wheelchair.name} (${booking.totalDays} days)`,
+      description: `Wheelchair rental: ${booking.wheelchair.name} (${booking.totalDays} days, incl. VAT)`,
     });
     console.log("[CREATE INTENT] Stripe intent created:", {
       id: intent.id,
@@ -79,7 +135,7 @@ export class PaymentService {
       where: { bookingId: booking.id },
       update: {
         stripePaymentIntentId: intent.id,
-        amount: booking.totalPrice,
+        amount: totalAmount,
         currency: CURRENCY,
         status: "PENDING",
         metadata: toJson(intent.metadata),
@@ -87,7 +143,7 @@ export class PaymentService {
       create: {
         bookingId: booking.id,
         stripePaymentIntentId: intent.id,
-        amount: booking.totalPrice,
+        amount: totalAmount,
         currency: CURRENCY,
         status: "PENDING",
         metadata: toJson(intent.metadata),
@@ -103,26 +159,64 @@ export class PaymentService {
   }
 
   async handleWebhook(event: import("stripe").Stripe.Event): Promise<void> {
+    console.log("[WEBHOOK] Enter handleWebhook", {
+      id: event.id,
+      type: event.type,
+      livemode: event.livemode,
+      apiVersion: event.api_version,
+      created: event.created,
+    });
+
     switch (event.type) {
       case "payment_intent.succeeded": {
         console.log("[WEBHOOK] payment_intent.succeeded received");
-        const intent = event.data
-          .object as import("stripe").Stripe.PaymentIntent;
+        const object = event.data.object as { object?: string };
+        if (object?.object !== "payment_intent") {
+          console.error("[WEBHOOK] Unexpected succeeded payload object", {
+            eventId: event.id,
+            eventType: event.type,
+            objectType: object?.object,
+          });
+          return;
+        }
+
+        const intent = event.data.object as import("stripe").Stripe.PaymentIntent;
+        console.log("[WEBHOOK] Routing succeeded intent", {
+          id: intent.id,
+          status: intent.status,
+          metadata: intent.metadata,
+        });
         await this.onPaymentSucceeded(intent);
+        console.log("[WEBHOOK] onPaymentSucceeded completed", {
+          paymentIntentId: intent.id,
+        });
         break;
       }
       case "payment_intent.payment_failed": {
-        const intent = event.data
-          .object as import("stripe").Stripe.PaymentIntent;
+        const intent = event.data.object as import("stripe").Stripe.PaymentIntent;
+        console.log("[WEBHOOK] Routing failed intent", {
+          id: intent.id,
+          status: intent.status,
+        });
         await this.onPaymentFailed(intent);
         break;
       }
       case "charge.refunded": {
         const charge = event.data.object as import("stripe").Stripe.Charge;
+        console.log("[WEBHOOK] Routing refunded charge", {
+          id: charge.id,
+          paymentIntent: charge.payment_intent,
+          amountRefunded: charge.amount_refunded,
+        });
         await this.onRefunded(charge);
         break;
       }
       default:
+        console.warn("[WEBHOOK] Unhandled event type", {
+          id: event.id,
+          type: event.type,
+          object: (event.data.object as { object?: string } | null)?.object,
+        });
         break;
     }
   }
@@ -168,10 +262,7 @@ export class PaymentService {
     console.log("[PAYMENT] Current booking status:", booking.status);
     console.log("[PAYMENT] Current payment status:", booking.payment?.status);
 
-    if (
-      booking.status === "CONFIRMED" &&
-      booking.payment?.status === "SUCCEEDED"
-    ) {
+    if (booking.paymentStatus === "PAID") {
       console.log("[PAYMENT] ⚠️ Already confirmed, skipping");
       return;
     }
@@ -202,9 +293,23 @@ export class PaymentService {
       if (booking.status !== "CONFIRMED") {
         await tx.booking.update({
           where: { id: bookingId },
-          data: { status: "CONFIRMED" },
+          data: {
+            status: "CONFIRMED",
+            paymentMethod: "ONLINE",
+            paymentStatus: "PAID",
+            paidAt: new Date(),
+          },
         });
         console.log("[PAYMENT] Booking marked CONFIRMED");
+      } else {
+        await tx.booking.update({
+          where: { id: bookingId },
+          data: {
+            paymentMethod: "ONLINE",
+            paymentStatus: "PAID",
+            paidAt: new Date(),
+          },
+        });
       }
     });
     console.log("[PAYMENT] Transaction completed");
@@ -219,11 +324,16 @@ export class PaymentService {
       await sendBookingConfirmationEmail({
         to: booking.user.email,
         customerName: booking.user.name,
+        phoneNumber: booking.phoneNumber,
+        deliveryAddress: booking.deliveryAddress,
+        deliveryNotes: booking.deliveryNotes ?? undefined,
         wheelchairName: booking.wheelchair.name,
         startDate: booking.startDate,
         endDate: booking.endDate,
-        totalPrice: Number(booking.totalPrice),
+        subtotal: Number(booking.totalPrice),
         bookingId,
+        paymentMethod: "ONLINE",
+        paymentStatus: "PAID",
       });
       console.log("[PAYMENT] EMAIL SENT SUCCESSFULLY");
     } catch (error) {
@@ -280,6 +390,42 @@ export class PaymentService {
         stripeRefundId: refundId,
       },
     });
+  }
+
+  async markCashBookingPaid(bookingId: string) {
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        user: { select: { email: true, name: true } },
+      },
+    });
+
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+    if (booking.paymentMethod !== "CASH") {
+      throw new Error("Only CASH bookings can be marked as paid");
+    }
+    if (booking.paymentStatus === "PAID") {
+      return { updated: false, booking };
+    }
+
+    const updated = await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        paymentStatus: "PAID",
+        paidAt: new Date(),
+        status: "COMPLETED",
+      },
+    });
+
+    await sendCashPaymentReceivedEmail({
+      to: booking.user.email,
+      customerName: booking.user.name,
+      bookingId: updated.id,
+    });
+
+    return { updated: true, booking: updated };
   }
 }
 

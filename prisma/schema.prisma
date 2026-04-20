@@ -35,6 +35,16 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PaymentMethod {
+  ONLINE
+  CASH
+}
+
+enum BookingPaymentStatus {
+  PENDING
+  PAID
+}
+
 enum WheelchairStatus {
   AVAILABLE
   MAINTENANCE
@@ -117,8 +127,12 @@ model Booking {
   totalDays       Int
   totalPrice      Decimal       @db.Decimal(10, 2)
   status          BookingStatus @default(PENDING)
-  notes           String?
-  deliveryAddress String?
+  phoneNumber     String
+  deliveryAddress String
+  deliveryNotes   String?
+  paymentMethod   PaymentMethod       @default(ONLINE)
+  paymentStatus   BookingPaymentStatus @default(PENDING)
+  paidAt          DateTime?
   cancelledAt     DateTime?
   cancelReason    String?
   createdAt       DateTime      @default(now())

@@ -13,6 +13,8 @@ import {
 import { loadStripe } from "@stripe/stripe-js";
 import { useRouter } from "next/navigation";
 import "react-day-picker/dist/style.css";
+import { formatAED } from "@/lib/currency";
+import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
@@ -29,11 +31,9 @@ interface WheelchairInfo {
 function PaymentForm({
   bookingId,
   locale,
-  clientSecret,
 }: {
   bookingId: string;
   locale: string;
-  clientSecret: string;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -118,7 +118,9 @@ export default function BookPage({
     return Math.max(1, differenceInDays(dateRange.to, dateRange.from));
   }, [dateRange]);
 
-  const totalPrice = wheelchair ? days * Number(wheelchair.pricePerDay) : 0;
+  const subtotal = wheelchair ? days * Number(wheelchair.pricePerDay) : 0;
+  const taxAmount = calculateTax(subtotal, VAT_RATE);
+  const totalPrice = calculateTotal(subtotal, VAT_RATE);
 
   const initializePayment = useCallback(
     async (targetBookingId: string) => {
@@ -184,6 +186,11 @@ export default function BookPage({
   }, [bookingId, clientSecret, initializePayment]);
 
   const [bookingStatus, setBookingStatus] = useState<string | null>(null);
+  const [customerName, setCustomerName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryNotes, setDeliveryNotes] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "CASH">("ONLINE");
 
   useEffect(() => {
     if (bookingIdState) {
@@ -207,6 +214,18 @@ export default function BookPage({
       setError("Please select a start and end date");
       return;
     }
+    if (!customerName.trim()) {
+      setError("Full name is required");
+      return;
+    }
+    if (!phoneNumber.trim()) {
+      setError("Phone number is required");
+      return;
+    }
+    if (!deliveryAddress.trim()) {
+      setError("Delivery address is required");
+      return;
+    }
 
     if (dateRange.from >= dateRange.to) {
       setError("End date must be after start date");
@@ -224,6 +243,7 @@ export default function BookPage({
         wheelchairId,
         startDate,
         endDate,
+        paymentMethod,
       });
 
       const bookingResponse = await fetch("/api/bookings", {
@@ -233,6 +253,11 @@ export default function BookPage({
           wheelchairId,
           startDate,
           endDate,
+          fullName: customerName,
+          phoneNumber,
+          deliveryAddress,
+          deliveryNotes: deliveryNotes || undefined,
+          paymentMethod,
         }),
       });
       const bookingData = await bookingResponse.json();
@@ -243,6 +268,10 @@ export default function BookPage({
 
       const newBookingId = bookingData.data.id;
       setBookingId(newBookingId);
+      if (paymentMethod === "CASH") {
+        router.push(`/${locale}/payment/success?bookingId=${newBookingId}&method=CASH`);
+        return;
+      }
       await initializePayment(newBookingId);
     } catch (bookingError) {
       setError(
@@ -275,7 +304,7 @@ export default function BookPage({
             {step === "dates" ? (
               <div className="card p-6">
                 <h2 className="mb-4 font-semibold text-slate-900">
-                  Select Rental Dates
+                  Select Rental Dates & Delivery Details
                 </h2>
 
                 <style>{`
@@ -293,6 +322,54 @@ export default function BookPage({
                   className="mx-auto"
                 />
 
+                <div className="mt-5 grid gap-3">
+                  <input
+                    className="input"
+                    placeholder="Full name"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                  />
+                  <input
+                    className="input"
+                    placeholder="Phone number"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                  />
+                  <textarea
+                    className="input min-h-24"
+                    placeholder="Delivery address"
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                  />
+                  <textarea
+                    className="input min-h-20"
+                    placeholder="Delivery notes (optional)"
+                    value={deliveryNotes}
+                    onChange={(e) => setDeliveryNotes(e.target.value)}
+                  />
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="mb-2 text-sm font-medium text-slate-700">Payment Method</p>
+                    <div className="flex gap-3 text-sm">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          checked={paymentMethod === "ONLINE"}
+                          onChange={() => setPaymentMethod("ONLINE")}
+                        />
+                        ONLINE (Stripe)
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          checked={paymentMethod === "CASH"}
+                          onChange={() => setPaymentMethod("CASH")}
+                        />
+                        CASH on Delivery
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
                 {error && (
                   <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">
                     {error}
@@ -304,7 +381,11 @@ export default function BookPage({
                   disabled={!dateRange?.from || !dateRange?.to || loading}
                   className="btn-primary mt-4 w-full justify-center py-3"
                 >
-                  {loading ? "Processing..." : "Next: Payment"}
+                  {loading
+                    ? "Processing..."
+                    : paymentMethod === "CASH"
+                      ? "Confirm Booking (COD)"
+                      : "Next: Payment"}
                 </button>
               </div>
             ) : (
@@ -338,7 +419,6 @@ export default function BookPage({
                     <PaymentForm
                       bookingId={bookingIdState}
                       locale={locale}
-                      clientSecret={clientSecret}
                     />
                   </Elements>
                 ) : (
@@ -364,7 +444,7 @@ export default function BookPage({
               <div className="mb-4 rounded-xl bg-slate-50 p-4">
                 <p className="text-sm font-medium text-slate-900">{name}</p>
                 <p className="mt-1 text-xs text-slate-400">
-                  ${Number(wheelchair.pricePerDay).toFixed(2)}/day
+                  {formatAED(Number(wheelchair.pricePerDay))}/day
                 </p>
               </div>
 
@@ -387,11 +467,18 @@ export default function BookPage({
                     <span className="font-medium">{days} days</span>
                   </div>
                   <hr className="my-2 border-slate-100" />
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Subtotal</span>
+                    <span>{formatAED(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Tax ({(VAT_RATE * 100).toFixed(0)}%)</span>
+                    <span>{formatAED(taxAmount)}</span>
+                  </div>
+                  <hr className="my-2 border-slate-100" />
                   <div className="flex justify-between text-base font-bold">
                     <span>Total</span>
-                    <span className="text-primary-700">
-                      ${totalPrice.toFixed(2)}
-                    </span>
+                    <span className="text-primary-700">{formatAED(totalPrice)}</span>
                   </div>
                 </div>
               ) : (

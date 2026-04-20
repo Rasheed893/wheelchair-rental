@@ -2,6 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { WheelchairPublic } from "@/types";
+import { formatAED } from "@/lib/currency";
 
 interface Props {
   wheelchair: WheelchairPublic;
@@ -33,6 +34,7 @@ export default function WheelchairCard({ wheelchair, locale }: Props) {
             src={wheelchair.images[0]}
             alt={name}
             fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             className="object-cover group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
@@ -80,7 +82,7 @@ export default function WheelchairCard({ wheelchair, locale }: Props) {
         <div className="flex items-center justify-between">
           <div>
             <span className="text-2xl font-bold text-slate-900">
-              AED{Number(wheelchair.pricePerDay).toFixed(2)}
+              {formatAED(Number(wheelchair.pricePerDay))}
             </span>
             <span className="text-slate-400 text-sm">
               /{isAr ? "يوم" : "day"}
