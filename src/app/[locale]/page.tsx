@@ -8,11 +8,16 @@ interface Props {
 }
 
 async function getFeaturedWheelchairs() {
-  return prisma.wheelchair.findMany({
-    where: { status: "AVAILABLE" },
-    take: 6,
-    orderBy: { createdAt: "desc" },
-  });
+  try {
+    return await prisma.wheelchair.findMany({
+      where: { status: "AVAILABLE" },
+      take: 6,
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (error) {
+    console.error("[HOME] Failed to load featured wheelchairs", error);
+    return [];
+  }
 }
 
 export default async function HomePage({ params }: Props) {

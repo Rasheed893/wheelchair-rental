@@ -16,8 +16,17 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
     context: NextRouteContext,
   ): Promise<NextResponse> => {
     const token = req.cookies.get(COOKIE_NAME)?.value;
+    const pathname = req.nextUrl.pathname;
+
+    console.log("[AUTH] incoming request", {
+      pathname,
+      method: req.method,
+      hasToken: Boolean(token),
+      allowedRoles: allowedRoles ?? "ANY_AUTHENTICATED_USER",
+    });
 
     if (!token) {
+      console.warn("[AUTH] missing auth token", { pathname, method: req.method });
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 },
@@ -27,6 +36,10 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
     const payload = await verifyToken(token);
 
     if (!payload) {
+      console.warn("[AUTH] invalid or expired token", {
+        pathname,
+        method: req.method,
+      });
       return NextResponse.json(
         { success: false, error: "Invalid or expired token" },
         { status: 401 },
@@ -34,11 +47,24 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
     }
 
     if (allowedRoles && !allowedRoles.includes(payload.role)) {
+      console.warn("[AUTH] forbidden by role", {
+        pathname,
+        method: req.method,
+        role: payload.role,
+        allowedRoles,
+      });
       return NextResponse.json(
         { success: false, error: "Forbidden" },
         { status: 403 },
       );
     }
+
+    console.log("[AUTH] authorized", {
+      pathname,
+      method: req.method,
+      userId: payload.sub,
+      role: payload.role,
+    });
 
     const user: AuthUser = {
       id: payload.sub,

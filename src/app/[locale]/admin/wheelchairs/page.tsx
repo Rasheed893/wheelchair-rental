@@ -1,17 +1,16 @@
-// src/app/[locale]/admin/wheelchairs/page.tsx
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import AdminSidebar from "@/components/layout/AdminSidebar";
-import type { Wheelchair } from "@prisma/client";
+import { formatAED } from "@/lib/currency";
+import { getCurrentUser } from "@/lib/auth";
+import { wheelchairService } from "@/services/wheelchair.service";
 
 interface Props {
-  params: { locale: string };
-}
-
-async function getWheelchairs(): Promise<Wheelchair[]> {
-  return prisma.wheelchair.findMany({ orderBy: { createdAt: "desc" } });
+  params: Promise<{ locale: string }>;
+  searchParams?: {
+    startDate?: string;
+    endDate?: string;
+  };
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -20,89 +19,150 @@ const STATUS_BADGE: Record<string, string> = {
   RETIRED: "badge-red",
 };
 
-export default async function AdminWheelchairsPage({ params }: Props) {
-  const { locale } = params;
-  const isAr = locale === "ar";
-  const user = await getCurrentUser();
-  if (!user || user.role !== "ADMIN") redirect(`/${locale}/dashboard`);
+function toDateOrDefault(value: string | undefined, fallback: Date) {
+  if (!value) return fallback;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+}
 
-  const wheelchairs = await getWheelchairs();
+export default async function AdminWheelchairsPage({
+  params,
+  searchParams,
+}: Props) {
+  const { locale } = await params;
+  const user = await getCurrentUser();
+
+  if (!user || user.role !== "ADMIN") {
+    redirect(`/${locale}/dashboard`);
+  }
+
+  const today = new Date();
+  const defaultEnd = new Date(today);
+  defaultEnd.setDate(defaultEnd.getDate() + 7);
+
+  const startDate = toDateOrDefault(searchParams?.startDate, today);
+  const endDate = toDateOrDefault(searchParams?.endDate, defaultEnd);
+
+  const wheelchairs = await wheelchairService.listInventorySummary(
+    startDate,
+    endDate,
+  );
 
   return (
     <div className="page-container py-10">
       <div className="flex gap-8">
         <AdminSidebar locale={locale} />
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-8">
-            <h1 className="section-heading">
-              {isAr ? "إدارة الكراسي" : "Wheelchair Inventory"}
-            </h1>
+        <div className="min-w-0 flex-1">
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="section-heading">Wheelchair Inventory</h1>
+              <p className="mt-2 text-sm text-slate-500">
+                Track stock, overlapping bookings, and available chairs by date
+                range.
+              </p>
+            </div>
             <Link
               href={`/${locale}/admin/wheelchairs/new`}
               className="btn-primary"
             >
-              {isAr ? "+ إضافة كرسي" : "+ Add Wheelchair"}
+              + Add Wheelchair
             </Link>
           </div>
+
+          <form className="card mb-6 grid gap-4 p-5 sm:grid-cols-3">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Start date
+              </label>
+              <input
+                type="date"
+                name="startDate"
+                defaultValue={startDate.toISOString().slice(0, 10)}
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                End date
+              </label>
+              <input
+                type="date"
+                name="endDate"
+                defaultValue={endDate.toISOString().slice(0, 10)}
+                className="input-field"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                type="submit"
+                className="btn-outline w-full justify-center py-3"
+              >
+                Refresh Availability
+              </button>
+            </div>
+          </form>
 
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                    <th className="px-5 py-3 text-start">
-                      {isAr ? "الاسم" : "Name"}
-                    </th>
-                    <th className="px-5 py-3 text-start">
-                      {isAr ? "الفئة" : "Category"}
-                    </th>
-                    <th className="px-5 py-3 text-start">
-                      {isAr ? "السعر/يوم" : "Price/Day"}
-                    </th>
-                    <th className="px-5 py-3 text-start">
-                      {isAr ? "الرقم التسلسلي" : "Serial No."}
-                    </th>
-                    <th className="px-5 py-3 text-start">
-                      {isAr ? "الحالة" : "Status"}
-                    </th>
-                    <th className="px-5 py-3 text-start">
-                      {isAr ? "إجراءات" : "Actions"}
-                    </th>
+                  <tr className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500">
+                    <th className="px-5 py-3">Product</th>
+                    <th className="px-5 py-3">Category</th>
+                    <th className="px-5 py-3">Price/Day</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3">Total stock</th>
+                    <th className="px-5 py-3">Booked</th>
+                    <th className="px-5 py-3">Available</th>
+                    <th className="px-5 py-3">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {wheelchairs.map((w) => (
-                    <tr
-                      key={w.id}
-                      className="hover:bg-slate-50/50 transition-colors"
-                    >
+                <tbody className="divide-y divide-slate-100">
+                  {wheelchairs.map((wheelchair) => (
+                    <tr key={wheelchair.id} className="hover:bg-slate-50/50">
                       <td className="px-5 py-4">
                         <div className="font-medium text-slate-900">
-                          {isAr ? w.nameAr : w.name}
+                          {wheelchair.name}
                         </div>
-                        <div className="text-slate-400 text-xs">
-                          {isAr ? w.name : w.nameAr}
+                        <div className="text-xs text-slate-400">
+                          {wheelchair.serialNumber}
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-slate-600">{w.category}</td>
+                      <td className="px-5 py-4 text-slate-600">
+                        {wheelchair.category}
+                      </td>
                       <td className="px-5 py-4 font-semibold text-slate-900">
-                        ${Number(w.pricePerDay).toFixed(2)}
-                      </td>
-                      <td className="px-5 py-4 text-slate-500 font-mono text-xs">
-                        {w.serialNumber}
+                        {formatAED(Number(wheelchair.pricePerDay))}
                       </td>
                       <td className="px-5 py-4">
-                        <span className={STATUS_BADGE[w.status]}>
-                          {w.status}
+                        <span className={STATUS_BADGE[wheelchair.status]}>
+                          {wheelchair.status}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        {wheelchair.inventory.totalStock}
+                      </td>
+                      <td className="px-5 py-4">
+                        {wheelchair.inventory.bookedQuantity}
+                      </td>
+                      <td className="px-5 py-4">
+                        <span
+                          className={
+                            wheelchair.inventory.availableStock > 0
+                              ? "font-semibold text-emerald-700"
+                              : "font-semibold text-red-600"
+                          }
+                        >
+                          {wheelchair.inventory.availableStock}
                         </span>
                       </td>
                       <td className="px-5 py-4">
                         <Link
-                          href={`/${locale}/admin/wheelchairs/${w.id}/edit`}
-                          className="text-primary-600 hover:text-primary-800 font-medium text-xs me-3"
+                          href={`/${locale}/admin/wheelchairs/${wheelchair.id}/edit`}
+                          className="text-xs font-medium text-primary-600 hover:text-primary-800"
                         >
-                          {isAr ? "تعديل" : "Edit"}
+                          Edit
                         </Link>
                       </td>
                     </tr>
@@ -111,14 +171,8 @@ export default async function AdminWheelchairsPage({ params }: Props) {
               </table>
 
               {wheelchairs.length === 0 && (
-                <div className="text-center py-16 text-slate-400">
-                  <p>{isAr ? "لا توجد كراسي بعد" : "No wheelchairs yet."}</p>
-                  <Link
-                    href={`/${locale}/admin/wheelchairs/new`}
-                    className="btn-primary mt-4 inline-flex"
-                  >
-                    {isAr ? "أضف أول كرسي" : "Add First Wheelchair"}
-                  </Link>
+                <div className="py-16 text-center text-slate-400">
+                  No wheelchairs found.
                 </div>
               )}
             </div>

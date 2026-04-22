@@ -1,5 +1,4 @@
-// src/services/payment.service.ts
-// import { sendBookingConfirmationEmail } from "@/lib/email";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import type { PaymentIntentResponse } from "@/types";
@@ -12,8 +11,26 @@ import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
 
 const CURRENCY = "aed";
 
+type EmailMetadata = {
+  bookingConfirmationCustomerSentAt?: string;
+  paymentConfirmationSentAt?: string;
+  [key: string]: unknown;
+};
+
 function toJson<T>(value: T) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function toInputJson(value: unknown) {
+  return value as Prisma.InputJsonValue;
+}
+
+function isValidEmail(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 3 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+  );
 }
 
 export class PaymentService {
@@ -237,7 +254,7 @@ export class PaymentService {
       console.error(
         `[Webhook] Missing bookingId metadata for intent: ${intent.id}`,
       );
-      console.error("[PAYMENT] ❌ Missing bookingId in metadata");
+      console.error("[PAYMENT] Missing bookingId in metadata");
       return;
     }
 
@@ -250,47 +267,45 @@ export class PaymentService {
       },
     });
     console.log("[PAYMENT] Booking fetch result:", {
-      found: !!booking,
+      found: Boolean(booking),
       status: booking?.status,
       email: booking?.user?.email,
+      bookingPaymentStatus: booking?.paymentStatus,
+      paymentRowStatus: booking?.payment?.status,
     });
 
     if (!booking) {
       console.error(`[Webhook] Booking not found for intent: ${intent.id}`);
       return;
     }
-    console.log("[PAYMENT] Current booking status:", booking.status);
-    console.log("[PAYMENT] Current payment status:", booking.payment?.status);
 
-    if (booking.paymentStatus === "PAID") {
-      console.log("[PAYMENT] ⚠️ Already confirmed, skipping");
-      return;
-    }
+    if (booking.paymentStatus !== "PAID") {
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.upsert({
+          where: { bookingId },
+          update: {
+            stripePaymentIntentId: intent.id,
+            amount: Number(intent.amount) / 100,
+            currency: intent.currency,
+            status: "SUCCEEDED",
+            paidAt: new Date(),
+            metadata: toInputJson({
+              ...this.getPaymentMetadata(booking.payment?.metadata),
+              ...toJson(intent),
+            }),
+          },
+          create: {
+            bookingId,
+            stripePaymentIntentId: intent.id,
+            amount: Number(intent.amount) / 100,
+            currency: intent.currency,
+            status: "SUCCEEDED",
+            paidAt: new Date(),
+            metadata: toJson(intent),
+          },
+        });
+        console.log("[PAYMENT] Payment updated");
 
-    await prisma.$transaction(async (tx) => {
-      await tx.payment.upsert({
-        where: { bookingId },
-        update: {
-          stripePaymentIntentId: intent.id,
-          amount: Number(intent.amount) / 100,
-          currency: intent.currency,
-          status: "SUCCEEDED",
-          paidAt: new Date(),
-          metadata: toJson(intent),
-        },
-        create: {
-          bookingId,
-          stripePaymentIntentId: intent.id,
-          amount: Number(intent.amount) / 100,
-          currency: intent.currency,
-          status: "SUCCEEDED",
-          paidAt: new Date(),
-          metadata: toJson(intent),
-        },
-      });
-      console.log("[PAYMENT] Payment updated");
-
-      if (booking.status !== "CONFIRMED") {
         await tx.booking.update({
           where: { id: bookingId },
           data: {
@@ -300,45 +315,28 @@ export class PaymentService {
             paidAt: new Date(),
           },
         });
-        console.log("[PAYMENT] Booking marked CONFIRMED");
-      } else {
-        await tx.booking.update({
-          where: { id: bookingId },
-          data: {
-            paymentMethod: "ONLINE",
-            paymentStatus: "PAID",
-            paidAt: new Date(),
-          },
-        });
-      }
-    });
-    console.log("[PAYMENT] Transaction completed");
-
-    await invoiceService.generate(bookingId, booking.user.id);
-    console.log("[PAYMENT] Invoice generated");
-
-    console.log("[PAYMENT] ABOUT TO SEND EMAIL");
-
-    try {
-      console.log("[EMAIL] Sending booking confirmation...");
-      await sendBookingConfirmationEmail({
-        to: booking.user.email,
-        customerName: booking.user.name,
-        phoneNumber: booking.phoneNumber,
-        deliveryAddress: booking.deliveryAddress,
-        deliveryNotes: booking.deliveryNotes ?? undefined,
-        wheelchairName: booking.wheelchair.name,
-        startDate: booking.startDate,
-        endDate: booking.endDate,
-        subtotal: Number(booking.totalPrice),
-        bookingId,
-        paymentMethod: "ONLINE",
-        paymentStatus: "PAID",
       });
-      console.log("[PAYMENT] EMAIL SENT SUCCESSFULLY");
-    } catch (error) {
-      console.error("[Email] Failed to send booking confirmation:", error);
+
+      console.log("[PAYMENT] Booking marked paid by Stripe");
+      await invoiceService.generate(bookingId, booking.user.id);
+      console.log("[PAYMENT] Invoice generated");
+    } else {
+      console.log("[PAYMENT] Booking already marked paid, verifying email idempotency state");
     }
+
+    await this.sendBookingEmailsForPaidBooking({
+      bookingId,
+      customerEmail: booking.user.email,
+      customerName: booking.user.name,
+      phoneNumber: booking.phoneNumber,
+      deliveryAddress: booking.deliveryAddress,
+      deliveryNotes: booking.deliveryNotes ?? undefined,
+      wheelchairName: booking.wheelchair.name,
+      startDate: booking.startDate,
+      endDate: booking.endDate,
+      subtotal: Number(booking.totalPrice),
+      paymentMethod: "ONLINE",
+    });
   }
 
   private async onPaymentFailed(intent: import("stripe").Stripe.PaymentIntent) {
@@ -393,11 +391,22 @@ export class PaymentService {
   }
 
   async markCashBookingPaid(bookingId: string) {
+    console.log("[MARK PAID] service entered", { bookingId });
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        user: { select: { email: true, name: true } },
+        user: { select: { id: true, email: true, name: true } },
+        payment: true,
       },
+    });
+    console.log("[MARK PAID] booking lookup result", {
+      found: Boolean(booking),
+      bookingId,
+      paymentMethod: booking?.paymentMethod,
+      paymentStatus: booking?.paymentStatus,
+      userId: booking?.user?.id,
+      userEmail: booking?.user?.email,
+      paymentMetadata: booking?.payment?.metadata,
     });
 
     if (!booking) {
@@ -406,26 +415,386 @@ export class PaymentService {
     if (booking.paymentMethod !== "CASH") {
       throw new Error("Only CASH bookings can be marked as paid");
     }
-    if (booking.paymentStatus === "PAID") {
-      return { updated: false, booking };
+
+    if (!isValidEmail(booking.user?.email)) {
+      console.error("[MARK PAID] invalid or missing customer email", {
+        bookingId,
+        userEmail: booking.user?.email,
+      });
+      throw new Error("Booking user email is missing or invalid");
     }
 
-    const updated = await prisma.booking.update({
+    const paymentMetadata = this.getPaymentMetadata(booking.payment?.metadata);
+    const wasPending = booking.paymentStatus === "PENDING";
+    console.log("[MARK PAID] status check", {
+      bookingId,
+      previousPaymentStatus: booking.paymentStatus,
+      shouldTransitionToPaid: wasPending,
+      paymentConfirmationSentAt: paymentMetadata.paymentConfirmationSentAt,
+    });
+
+    if (wasPending) {
+      console.log("[MARK PAID] updating payment status", {
+        bookingId,
+        from: booking.paymentStatus,
+        to: "PAID",
+      });
+      await prisma.$transaction(async (tx) => {
+        await tx.booking.update({
+          where: { id: bookingId },
+          data: {
+            paymentStatus: "PAID",
+            paidAt: new Date(),
+          },
+        });
+
+        await tx.payment.upsert({
+          where: { bookingId },
+          update: {
+            stripePaymentIntentId: booking.payment?.stripePaymentIntentId ?? `cash_${bookingId}`,
+            amount: booking.totalPrice,
+            currency: booking.payment?.currency ?? CURRENCY,
+            status: "SUCCEEDED",
+            paidAt: new Date(),
+            metadata: toInputJson({
+              ...paymentMetadata,
+              source: "cash",
+              bookingId,
+            }),
+          },
+          create: {
+            bookingId,
+            stripePaymentIntentId: `cash_${bookingId}`,
+            amount: booking.totalPrice,
+            currency: CURRENCY,
+            status: "SUCCEEDED",
+            paidAt: new Date(),
+            metadata: toInputJson({
+              source: "cash",
+              bookingId,
+            }),
+          },
+        });
+      });
+
+      console.log("[PAYMENT] Cash booking marked paid", {
+        bookingId,
+        previousPaymentStatus: booking.paymentStatus,
+        currentPaymentStatus: "PAID",
+      });
+    } else {
+      console.log("[MARK PAID] booking already PAID, checking idempotency guards", {
+        bookingId,
+      });
+    }
+
+    try {
+      console.log("[MARK PAID] calling email भेज", {
+        bookingId,
+        to: booking.user.email,
+        customerName: booking.user.name,
+      });
+      await this.sendCashPaymentConfirmation({
+        bookingId,
+        customerEmail: booking.user.email,
+        customerName: booking.user.name,
+      });
+      console.log("[MARK PAID] email flow completed", { bookingId });
+    } catch (error) {
+      console.error("[EMAIL ERROR]", {
+        bookingId,
+        to: booking.user.email,
+        error,
+      });
+      throw error;
+    }
+
+    const updated = await prisma.booking.findUnique({
       where: { id: bookingId },
-      data: {
-        paymentStatus: "PAID",
-        paidAt: new Date(),
-        status: "COMPLETED",
+    });
+
+    return { updated: booking.paymentStatus !== "PAID", booking: updated ?? booking };
+  }
+
+  async markCashBookingPaidForAdmin(bookingId: string) {
+    console.log("[MARK PAID] service entered", { bookingId });
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        user: { select: { id: true, email: true, name: true } },
+        payment: true,
       },
     });
-
-    await sendCashPaymentReceivedEmail({
-      to: booking.user.email,
-      customerName: booking.user.name,
-      bookingId: updated.id,
+    console.log("[MARK PAID] booking lookup result", {
+      found: Boolean(booking),
+      bookingId,
+      paymentMethod: booking?.paymentMethod,
+      paymentStatus: booking?.paymentStatus,
+      userId: booking?.user?.id,
+      userEmail: booking?.user?.email,
+      paymentMetadata: booking?.payment?.metadata,
     });
 
-    return { updated: true, booking: updated };
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (booking.paymentMethod !== "CASH") {
+      throw new Error("Only CASH bookings can be marked as paid");
+    }
+
+    if (!isValidEmail(booking.user?.email)) {
+      console.error("[MARK PAID] invalid or missing customer email", {
+        bookingId,
+        userEmail: booking.user?.email,
+      });
+      throw new Error("Booking user email is missing or invalid");
+    }
+
+    const paymentMetadata = this.getPaymentMetadata(booking.payment?.metadata);
+    const wasPending = booking.paymentStatus === "PENDING";
+    console.log("[MARK PAID] status check", {
+      bookingId,
+      previousPaymentStatus: booking.paymentStatus,
+      shouldTransitionToPaid: wasPending,
+      paymentConfirmationSentAt: paymentMetadata.paymentConfirmationSentAt,
+    });
+
+    if (!wasPending) {
+      const updatedBooking = await prisma.booking.findUnique({
+        where: { id: bookingId },
+      });
+
+      console.log("[MARK PAID] skipping email because payment status is already PAID", {
+        bookingId,
+      });
+
+      return {
+        updated: false,
+        booking: updatedBooking ?? booking,
+      };
+    }
+
+    console.log("[MARK PAID] updating payment status", {
+      bookingId,
+      from: booking.paymentStatus,
+      to: "PAID",
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          paymentStatus: "PAID",
+          paidAt: new Date(),
+        },
+      });
+
+      await tx.payment.upsert({
+        where: { bookingId },
+        update: {
+          stripePaymentIntentId:
+            booking.payment?.stripePaymentIntentId ?? `cash_${bookingId}`,
+          amount: booking.totalPrice,
+          currency: booking.payment?.currency ?? CURRENCY,
+          status: "SUCCEEDED",
+          paidAt: new Date(),
+          metadata: toInputJson({
+            ...paymentMetadata,
+            source: "cash",
+            bookingId,
+          }),
+        },
+        create: {
+          bookingId,
+          stripePaymentIntentId: `cash_${bookingId}`,
+          amount: booking.totalPrice,
+          currency: CURRENCY,
+          status: "SUCCEEDED",
+          paidAt: new Date(),
+          metadata: toInputJson({
+            source: "cash",
+            bookingId,
+          }),
+        },
+      });
+    });
+
+    console.log("[PAYMENT] Cash booking marked paid", {
+      bookingId,
+      previousPaymentStatus: booking.paymentStatus,
+      currentPaymentStatus: "PAID",
+    });
+
+    console.log("[MARK PAID] calling email भेज", {
+      bookingId,
+      to: booking.user.email,
+      customerName: booking.user.name,
+    });
+    await this.sendCashPaymentConfirmation({
+      bookingId,
+      customerEmail: booking.user.email,
+      customerName: booking.user.name,
+    });
+    console.log("[MARK PAID] email flow completed", { bookingId });
+
+    const updatedBooking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
+
+    return {
+      updated: true,
+      booking: updatedBooking ?? booking,
+    };
+  }
+
+  private getPaymentMetadata(metadata: unknown): EmailMetadata {
+    if (!metadata || Array.isArray(metadata) || typeof metadata !== "object") {
+      return {};
+    }
+
+    return metadata as EmailMetadata;
+  }
+
+  private async markPaymentEmailMetadata(
+    bookingId: string,
+    updates: Partial<EmailMetadata>,
+  ) {
+    const currentPayment = await prisma.payment.findUnique({
+      where: { bookingId },
+      select: { metadata: true },
+    });
+
+    if (!currentPayment) {
+      console.warn("[EMAIL] Cannot persist email metadata because payment row was not found", {
+        bookingId,
+        updates,
+      });
+      return;
+    }
+
+    const metadata = this.getPaymentMetadata(currentPayment.metadata);
+    await prisma.payment.update({
+      where: { bookingId },
+      data: {
+        metadata: toInputJson({
+          ...metadata,
+          ...updates,
+        }),
+      },
+    });
+  }
+
+  private async sendBookingEmailsForPaidBooking({
+    bookingId,
+    customerEmail,
+    customerName,
+    phoneNumber,
+    deliveryAddress,
+    deliveryNotes,
+    wheelchairName,
+    startDate,
+    endDate,
+    subtotal,
+    paymentMethod,
+  }: {
+    bookingId: string;
+    customerEmail: string;
+    customerName: string;
+    phoneNumber: string;
+    deliveryAddress: string;
+    deliveryNotes?: string;
+    wheelchairName: string;
+    startDate: Date;
+    endDate: Date;
+    subtotal: number;
+    paymentMethod: "ONLINE" | "CASH";
+  }) {
+    const payment = await prisma.payment.findUnique({
+      where: { bookingId },
+      select: { metadata: true },
+    });
+    const metadata = this.getPaymentMetadata(payment?.metadata);
+
+    if (!metadata.bookingConfirmationCustomerSentAt) {
+      await sendBookingConfirmationEmail({
+        to: customerEmail,
+        customerName,
+        phoneNumber,
+        deliveryAddress,
+        deliveryNotes,
+        wheelchairName,
+        startDate,
+        endDate,
+        subtotal,
+        bookingId,
+        paymentMethod,
+        paymentStatus: "PAID",
+      });
+      await this.markPaymentEmailMetadata(bookingId, {
+        bookingConfirmationCustomerSentAt: new Date().toISOString(),
+      });
+    } else {
+      console.log("[EMAIL] Customer paid booking confirmation already sent, skipping duplicate", {
+        bookingId,
+        sentAt: metadata.bookingConfirmationCustomerSentAt,
+      });
+    }
+
+  }
+
+  private async sendCashPaymentConfirmation({
+    bookingId,
+    customerEmail,
+    customerName,
+  }: {
+    bookingId: string;
+    customerEmail: string;
+    customerName: string;
+  }) {
+    console.log("[MARK PAID] sendCashPaymentConfirmation entered", {
+      bookingId,
+      customerEmail,
+    });
+    const payment = await prisma.payment.findUnique({
+      where: { bookingId },
+      select: { metadata: true },
+    });
+    const metadata = this.getPaymentMetadata(payment?.metadata);
+    console.log("[MARK PAID] email idempotency check", {
+      bookingId,
+      paymentConfirmationSentAt: metadata.paymentConfirmationSentAt,
+    });
+
+    if (metadata.paymentConfirmationSentAt) {
+      console.log("[MARK PAID] skipping email because payment confirmation already sent", {
+        bookingId,
+        sentAt: metadata.paymentConfirmationSentAt,
+      });
+      return;
+    }
+
+    try {
+      await sendCashPaymentReceivedEmail({
+        to: customerEmail,
+        customerName,
+        bookingId,
+      });
+
+      await this.markPaymentEmailMetadata(bookingId, {
+        paymentConfirmationSentAt: new Date().toISOString(),
+      });
+      console.log("[MARK PAID] payment confirmation email recorded in metadata", {
+        bookingId,
+      });
+    } catch (error) {
+      console.error("[EMAIL ERROR]", {
+        bookingId,
+        to: customerEmail,
+        error,
+      });
+      throw error;
+    }
   }
 }
 

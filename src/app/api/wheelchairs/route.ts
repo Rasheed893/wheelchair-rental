@@ -4,13 +4,11 @@ import { wheelchairService } from "@/services/wheelchair.service";
 import { createWheelchairSchema } from "@/validators/wheelchair.validator";
 import {
   withAdminAuth,
-  withCustomerAuth,
   ok,
   created,
   badRequest,
   serverError,
 } from "@/lib/middleware";
-import type { AuthUser } from "@/types";
 
 // GET /api/wheelchairs — Public (list available wheelchairs)
 export async function GET(req: NextRequest) {
@@ -39,7 +37,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/wheelchairs — Admin only
-export const POST = withAdminAuth(async (req, { user }) => {
+export const POST = withAdminAuth(async (req) => {
   try {
     const body = await req.json();
     const parsed = createWheelchairSchema.safeParse(body);

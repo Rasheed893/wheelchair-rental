@@ -1,15 +1,18 @@
 // src/app/[locale]/payment/cancel/page.tsx
 import Link from "next/link";
+import { use } from "react";
 
 export default function PaymentCancelPage({
   params,
   searchParams,
 }: {
-  params: { locale: string };
-  searchParams: { bookingId?: string };
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ bookingId?: string }>;
 }) {
-  const { locale } = params;
+  const { locale } = use(params);
+  const resolvedSearchParams = use(searchParams);
   const isAr = locale === "ar";
+  const supportPhone = process.env.SUPPORT_PHONE;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4">
@@ -30,9 +33,9 @@ export default function PaymentCancelPage({
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          {searchParams.bookingId && (
+          {resolvedSearchParams.bookingId && (
             <Link
-              href={`/${locale}/dashboard/bookings/${searchParams.bookingId}`}
+              href={`/${locale}/dashboard/bookings/${resolvedSearchParams.bookingId}`}
               className="btn-primary py-3 px-6"
             >
               {isAr ? "إكمال الدفع" : "Try Again"}
@@ -42,6 +45,14 @@ export default function PaymentCancelPage({
             {isAr ? "لوحة التحكم" : "My Dashboard"}
           </Link>
         </div>
+        {supportPhone && (
+          <p className="mt-5 text-sm text-slate-500">
+            {isAr ? "للمساعدة اتصل على " : "Need help? Call "}
+            <a href={`tel:${supportPhone}`} className="font-semibold text-primary-700 underline">
+              {supportPhone}
+            </a>
+          </p>
+        )}
       </div>
     </div>
   );

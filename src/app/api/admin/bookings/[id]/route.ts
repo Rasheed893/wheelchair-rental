@@ -1,5 +1,4 @@
 // src/app/api/admin/bookings/[id]/route.ts
-import { NextRequest } from "next/server";
 import { bookingService } from "@/services/booking.service";
 import {
   withAdminAuth,
@@ -8,8 +7,7 @@ import {
   notFound,
   serverError,
 } from "@/lib/middleware";
-
-type Ctx = { params: { id: string } };
+import type { BookingStatus } from "@prisma/client";
 
 // GET /api/admin/bookings/:id — Admin view single booking
 export const GET = withAdminAuth(async (_req, { params }) => {
@@ -26,12 +24,21 @@ export const GET = withAdminAuth(async (_req, { params }) => {
 export const PATCH = withAdminAuth(async (req, { params, user }) => {
   try {
     const body = await req.json();
-    const booking = await bookingService.cancel(
-      params.id,
-      user.id,
-      body.reason ?? "Cancelled by admin",
-      true, // isAdmin = true
-    );
+    const action = typeof body?.action === "string" ? body.action : "cancel";
+
+    const booking =
+      action === "update-status"
+        ? await bookingService.adminUpdateStatus(
+            params.id,
+            body.status as BookingStatus,
+          )
+        : await bookingService.cancel(
+            params.id,
+            user.id,
+            body.reason ?? "Cancelled by admin",
+            true,
+          );
+
     return ok(booking);
   } catch (err) {
     if (err instanceof Error) return badRequest(err.message);

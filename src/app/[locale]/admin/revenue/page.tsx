@@ -2,19 +2,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import AdminSidebar from "@/components/layout/AdminSidebar";
+import { formatAED } from "@/lib/currency";
 
 interface RevenuePoint {
   month: string;
   revenue: number;
 }
 
-export default function AdminRevenuePage({
-  params,
-}: {
-  params: { locale: string };
-}) {
-  const { locale } = params;
+export default function AdminRevenuePage() {
+  const params = useParams();
+  const locale = params.locale as string;
   const isAr = locale === "ar";
   const [data, setData] = useState<RevenuePoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,19 +48,19 @@ export default function AdminRevenuePage({
                 label: isAr
                   ? "إجمالي الإيرادات (12 شهر)"
                   : "Total Revenue (12mo)",
-                value: `$${totalRevenue.toFixed(2)}`,
+                value: formatAED(totalRevenue),
                 color: "text-primary-700",
               },
               {
                 label: isAr ? "متوسط شهري" : "Monthly Average",
-                value: `$${avgRevenue.toFixed(2)}`,
+                value: formatAED(avgRevenue),
                 color: "text-emerald-700",
               },
               {
                 label: isAr ? "أعلى شهر" : "Best Month",
                 value: data.length
-                  ? `$${Math.max(...data.map((d) => d.revenue)).toFixed(2)}`
-                  : "$0.00",
+                  ? formatAED(Math.max(...data.map((d) => d.revenue)))
+                  : formatAED(0),
                 color: "text-amber-700",
               },
             ].map((stat) => (
@@ -96,7 +95,7 @@ export default function AdminRevenuePage({
                     >
                       {/* Tooltip */}
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity text-xs bg-slate-900 text-white px-2 py-1 rounded whitespace-nowrap">
-                        ${point.revenue.toFixed(0)}
+                        {formatAED(point.revenue)}
                       </div>
                       {/* Bar */}
                       <div
@@ -141,7 +140,7 @@ export default function AdminRevenuePage({
                         <tr key={i} className="text-slate-600">
                           <td className="py-1.5">{point.month}</td>
                           <td className="text-end font-semibold">
-                            ${point.revenue.toFixed(2)}
+                            {formatAED(point.revenue)}
                           </td>
                           <td className="text-end text-slate-400">
                             {totalRevenue > 0

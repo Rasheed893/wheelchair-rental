@@ -23,6 +23,8 @@ enum Role {
 enum BookingStatus {
   PENDING    // Awaiting payment
   CONFIRMED  // Payment successful
+  OUT_FOR_DELIVERY
+  DELIVERED
   CANCELLED  // Cancelled by user or admin
   COMPLETED  // Rental period ended
   EXPIRED    // Payment never completed (auto-expire)
@@ -96,6 +98,7 @@ model Wheelchair {
   category      WheelchairCategory @default(STANDARD)
   status        WheelchairStatus   @default(AVAILABLE)
   pricePerDay   Decimal            @db.Decimal(10, 2)
+  stockQuantity Int                @default(1)
   images        String[]           // Array of image URLs
   features      String[]           // Feature tags (e.g., "foldable", "lightweight")
   featuresAr    String[]           // Arabic features

@@ -2,6 +2,8 @@
 import { format, differenceInDays } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import type { WheelchairPublic } from "@/types";
+import { formatAED } from "@/lib/currency";
+import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
 
 interface Props {
   wheelchair: WheelchairPublic;
@@ -19,8 +21,8 @@ export function BookingSummary({ wheelchair, dateRange, locale }: Props) {
 
   const pricePerDay = Number(wheelchair.pricePerDay);
   const subtotal = days * pricePerDay;
-  const taxAmount = parseFloat((subtotal * 0.15).toFixed(2));
-  const total = subtotal + taxAmount;
+  const taxAmount = calculateTax(subtotal, VAT_RATE);
+  const total = calculateTotal(subtotal, VAT_RATE);
   const name = isAr ? wheelchair.nameAr : wheelchair.name;
 
   return (
@@ -35,7 +37,7 @@ export function BookingSummary({ wheelchair, dateRange, locale }: Props) {
           {name}
         </p>
         <p className="text-slate-400 text-xs mt-0.5">
-          ${pricePerDay.toFixed(2)} / {isAr ? "يوم" : "day"}
+          {formatAED(pricePerDay)} / {isAr ? "يوم" : "day"}
         </p>
       </div>
 
@@ -67,20 +69,24 @@ export function BookingSummary({ wheelchair, dateRange, locale }: Props) {
 
           <div className="flex justify-between text-xs text-slate-500">
             <span>
-              {days} × ${pricePerDay.toFixed(2)}
+              {days} × {formatAED(pricePerDay)}
             </span>
-            <span>${subtotal.toFixed(2)}</span>
+            <span>{formatAED(subtotal)}</span>
           </div>
           <div className="flex justify-between text-xs text-slate-500">
-            <span>{isAr ? "ضريبة (15%)" : "Tax (15%)"}</span>
-            <span>${taxAmount.toFixed(2)}</span>
+            <span>
+              {isAr
+                ? `ضريبة (${(VAT_RATE * 100).toFixed(0)}%)`
+                : `Tax (${(VAT_RATE * 100).toFixed(0)}%)`}
+            </span>
+            <span>{formatAED(taxAmount)}</span>
           </div>
 
           <hr className="border-slate-100 my-1" />
 
           <div className="flex justify-between font-bold text-base">
             <span>{isAr ? "الإجمالي" : "Total"}</span>
-            <span className="text-primary-700">${total.toFixed(2)}</span>
+            <span className="text-primary-700">{formatAED(total)}</span>
           </div>
           <p className="text-xs text-slate-400 text-center pt-1">
             {isAr ? "شامل ضريبة القيمة المضافة" : "Inclusive of VAT"}

@@ -5,9 +5,10 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import AdminSidebar from "@/components/layout/AdminSidebar";
 import { format } from "date-fns";
+import { formatAED } from "@/lib/currency";
 
 interface Props {
-  params: { locale: string };
+  params: Promise<{ locale: string }>;
 }
 
 async function getStats() {
@@ -63,7 +64,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 export default async function AdminDashboardPage({ params }: Props) {
-  const { locale } = params;
+  const { locale } = await params;
   const isAr = locale === "ar";
   const user = await getCurrentUser();
 
@@ -92,7 +93,7 @@ export default async function AdminDashboardPage({ params }: Props) {
     },
     {
       label: isAr ? "إجمالي الإيرادات" : "Total Revenue",
-      value: `$${stats.totalRevenue.toFixed(2)}`,
+      value: formatAED(stats.totalRevenue),
       color: "text-primary-700",
       icon: "💰",
     },
@@ -221,7 +222,7 @@ export default async function AdminDashboardPage({ params }: Props) {
                         </span>
                       </td>
                       <td className="px-5 py-4 font-semibold text-slate-900">
-                        ${Number(booking.totalPrice).toFixed(2)}
+                        {formatAED(Number(booking.totalPrice))}
                       </td>
                     </tr>
                   ))}

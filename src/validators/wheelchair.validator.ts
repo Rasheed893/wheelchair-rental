@@ -12,6 +12,7 @@ export const createWheelchairSchema = z2.object({
   category: z2.nativeEnum(WheelchairCategory),
   status: z2.nativeEnum(WheelchairStatus).optional(),
   pricePerDay: z2.number().positive().multipleOf(0.01),
+  stockQuantity: z2.number().int().min(1).default(1),
   images: z2.array(z2.string().url()).min(1, "At least one image is required"),
   features: z2.array(z2.string()).default([]),
   featuresAr: z2.array(z2.string()).default([]),

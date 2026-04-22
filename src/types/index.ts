@@ -77,6 +77,7 @@ export type WheelchairPublic = Pick<
   | "category"
   | "status"
   | "pricePerDay"
+  | "stockQuantity"
   | "images"
   | "features"
   | "featuresAr"

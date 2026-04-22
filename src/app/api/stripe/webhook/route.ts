@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   console.log("[STRIPE WEBHOOK] HIT");
-  console.log("[STRIPE WEBHOOK] HEADERS:", req.headers);
+  console.log("[STRIPE WEBHOOK] STRIPE SIGNATURE PRESENT:", !!req.headers.get("stripe-signature"));
   const rawBody = await req.text();
   const signature = req.headers.get("stripe-signature");
 
@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
 
   try {
     console.log("[STRIPE WEBHOOK] Event type:", event.type);
+    console.log("[STRIPE WEBHOOK] Event id:", event.id);
     console.log(
       "[STRIPE WEBHOOK] Event data:",
       JSON.stringify(event.data, null, 2),
@@ -51,7 +52,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, received: true });
   } catch (error) {
-    console.error("[Stripe Webhook] Handler error:", error);
+    console.error("[Stripe Webhook] Handler error:", {
+      eventId: event.id,
+      eventType: event.type,
+      error,
+    });
     return NextResponse.json(
       { success: false, error: "Webhook processing failed" },
       { status: 500 },

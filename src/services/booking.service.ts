@@ -8,7 +8,16 @@ import type {
 import type { CreateBookingInput } from "@/validators/booking.validator";
 import { wheelchairService } from "./wheelchair.service";
 import { invoiceService } from "./invoice.service";
-import { sendBookingConfirmationEmail } from "@/lib/emails/send-booking-confirmation-email";
+import {
+  sendAdminBookingNotificationEmail,
+  sendBookingCancelledEmail,
+  sendBookingConfirmationEmail,
+  sendBookingStatusUpdateEmail,
+} from "@/lib/emails/send-booking-confirmation-email";
+import {
+  CANCELLABLE_BOOKING_STATUSES,
+  canTransitionBookingStatus,
+} from "@/lib/booking-status";
 
 export class BookingService {
   async create(
@@ -35,6 +44,16 @@ export class BookingService {
 
     if (!wheelchair) {
       throw new Error("Invalid wheelchair ID");
+    }
+
+    const availability = await wheelchairService.getAvailabilitySummary(
+      wheelchairId,
+      startDate,
+      endDate,
+    );
+
+    if (availability.availableStock < 1) {
+      throw new Error("Selected wheelchair is out of stock for those dates");
     }
 
     const { days, totalPrice } = await wheelchairService.calculatePrice(
@@ -75,11 +94,17 @@ export class BookingService {
       booking.user.name = input.fullName;
     }
 
-    if (input.paymentMethod === "CASH") {
-      await invoiceService.generate(booking.id, userId);
-      await sendBookingConfirmationEmail({
+    console.log("[BOOKING] Created booking", {
+      bookingId: booking.id,
+      paymentMethod: booking.paymentMethod,
+      paymentStatus: booking.paymentStatus,
+      customerEmail: booking.user.email,
+    });
+
+    try {
+      await sendAdminBookingNotificationEmail({
         to: booking.user.email,
-        customerName: input.fullName,
+        customerName: booking.user.name,
         phoneNumber: booking.phoneNumber,
         deliveryAddress: booking.deliveryAddress,
         deliveryNotes: booking.deliveryNotes ?? undefined,
@@ -88,9 +113,39 @@ export class BookingService {
         endDate: booking.endDate,
         subtotal: Number(booking.totalPrice),
         bookingId: booking.id,
-        paymentMethod: "CASH",
-        paymentStatus: "PENDING",
+        paymentMethod: booking.paymentMethod,
+        paymentStatus: booking.paymentStatus,
       });
+    } catch (error) {
+      console.error("[EMAIL] Admin booking email failed", {
+        bookingId: booking.id,
+        error,
+      });
+    }
+
+    if (input.paymentMethod === "CASH") {
+      await invoiceService.generate(booking.id, userId);
+      try {
+        await sendBookingConfirmationEmail({
+          to: booking.user.email,
+          customerName: booking.user.name,
+          phoneNumber: booking.phoneNumber,
+          deliveryAddress: booking.deliveryAddress,
+          deliveryNotes: booking.deliveryNotes ?? undefined,
+          wheelchairName: booking.wheelchair.name,
+          startDate: booking.startDate,
+          endDate: booking.endDate,
+          subtotal: Number(booking.totalPrice),
+          bookingId: booking.id,
+          paymentMethod: booking.paymentMethod,
+          paymentStatus: booking.paymentStatus,
+        });
+      } catch (error) {
+        console.error("[EMAIL] Customer booking confirmation failed", {
+          bookingId: booking.id,
+          error,
+        });
+      }
     }
 
     return booking as BookingWithRelations;
@@ -149,28 +204,73 @@ export class BookingService {
     if (!booking) throw new Error("Booking not found");
     if (!isAdmin && booking.userId !== userId) throw new Error("Forbidden");
 
-    if (!["PENDING", "CONFIRMED"].includes(booking.status)) {
+    if (!CANCELLABLE_BOOKING_STATUSES.includes(booking.status)) {
       throw new Error(`Cannot cancel a booking with status: ${booking.status}`);
     }
 
-    return prisma.booking.update({
+    const updated = await prisma.booking.update({
       where: { id: bookingId },
       data: {
         status: "CANCELLED",
         cancelledAt: new Date(),
         cancelReason: reason,
       },
-      include: { wheelchair: true, payment: true, invoice: true },
-    }) as Promise<BookingWithRelations>;
+      include: {
+        wheelchair: true,
+        payment: true,
+        invoice: true,
+        user: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    if (updated.user?.email) {
+      try {
+        await sendBookingCancelledEmail({
+          to: updated.user.email,
+          customerName: updated.user.name,
+          bookingId: updated.id,
+          supportPhone: process.env.SUPPORT_PHONE,
+        });
+      } catch (error) {
+        console.error("[EMAIL] Booking cancellation email failed", {
+          bookingId: updated.id,
+          error,
+        });
+      }
+    }
+
+    return updated as unknown as BookingWithRelations;
   }
 
   async adminList(
-    filters: { status?: BookingStatus } = {},
+    filters: {
+      status?: BookingStatus;
+      paymentStatus?: "PENDING" | "PAID";
+      query?: string;
+    } = {},
     pagination: PaginationParams = {},
   ): Promise<PaginatedResponse<BookingWithRelations>> {
     const { page = 1, pageSize = 20 } = pagination;
     const skip = (page - 1) * pageSize;
-    const where = filters.status ? { status: filters.status } : {};
+    const where = {
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.paymentStatus ? { paymentStatus: filters.paymentStatus } : {}),
+      ...(filters.query
+        ? {
+            OR: [
+              { id: { contains: filters.query, mode: "insensitive" as const } },
+              {
+                user: {
+                  email: {
+                    contains: filters.query,
+                    mode: "insensitive" as const,
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
 
     const [data, total] = await Promise.all([
       prisma.booking.findMany({
@@ -195,6 +295,61 @@ export class BookingService {
       pageSize,
       totalPages: Math.ceil(total / pageSize),
     };
+  }
+
+  async adminUpdateStatus(bookingId: string, nextStatus: BookingStatus) {
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        wheelchair: true,
+        payment: true,
+        invoice: true,
+      },
+    });
+
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (!canTransitionBookingStatus(booking.status, nextStatus)) {
+      throw new Error(
+        `Cannot update booking from ${booking.status} to ${nextStatus}`,
+      );
+    }
+
+    const updated = await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: nextStatus },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        wheelchair: true,
+        payment: true,
+        invoice: true,
+      },
+    });
+
+    if (
+      updated.user?.email &&
+      (nextStatus === "OUT_FOR_DELIVERY" || nextStatus === "DELIVERED")
+    ) {
+      try {
+        await sendBookingStatusUpdateEmail({
+          to: updated.user.email,
+          customerName: updated.user.name,
+          bookingId: updated.id,
+          status: nextStatus,
+        });
+      } catch (error) {
+        console.error("[EMAIL] Booking status update email failed", {
+          bookingId: updated.id,
+          nextStatus,
+          error,
+        });
+      }
+    }
+
+    return updated as unknown as BookingWithRelations;
   }
 
   async expireStaleBookings(): Promise<number> {

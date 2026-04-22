@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
 import AdminSidebar from "@/components/layout/AdminSidebar";
 import { format } from "date-fns";
 
@@ -14,12 +15,9 @@ interface UserRow {
   _count: { bookings: number };
 }
 
-export default function AdminUsersPage({
-  params,
-}: {
-  params: { locale: string };
-}) {
-  const { locale } = params;
+export default function AdminUsersPage() {
+  const params = useParams();
+  const locale = params.locale as string;
   const isAr = locale === "ar";
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);

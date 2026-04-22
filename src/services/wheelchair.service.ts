@@ -1,7 +1,7 @@
 // src/services/wheelchair.service.ts
 
 import { prisma } from "@/lib/prisma";
-import { differenceInDays, eachDayOfInterval, parseISO } from "date-fns";
+import { differenceInDays, eachDayOfInterval } from "date-fns";
 import type {
   CreateWheelchairInput,
   UpdateWheelchairInput,
@@ -12,6 +12,7 @@ import type {
   WheelchairCategory,
   WheelchairStatus,
 } from "@prisma/client";
+import { ACTIVE_BOOKING_STATUSES } from "@/lib/booking-status";
 
 export interface WheelchairFilters {
   category?: WheelchairCategory;
@@ -97,7 +98,7 @@ export class WheelchairService {
     const activeBookings = await prisma.booking.count({
       where: {
         wheelchairId: id,
-        status: { in: ["PENDING", "CONFIRMED"] },
+        status: { in: ACTIVE_BOOKING_STATUSES },
       },
     });
     if (activeBookings > 0) {
@@ -111,7 +112,7 @@ export class WheelchairService {
     const bookings = await prisma.booking.findMany({
       where: {
         wheelchairId,
-        status: { in: ["PENDING", "CONFIRMED"] },
+        status: { in: ACTIVE_BOOKING_STATUSES },
         endDate: { gte: new Date() },
       },
       select: { startDate: true, endDate: true },
@@ -136,17 +137,81 @@ export class WheelchairService {
     endDate: Date,
     excludeBookingId?: string,
   ): Promise<boolean> {
-    const overlap = await prisma.booking.findFirst({
+    const wheelchair = await prisma.wheelchair.findUnique({
+      where: { id: wheelchairId },
+      select: { stockQuantity: true },
+    });
+
+    if (!wheelchair) {
+      return false;
+    }
+
+    const overlapCount = await prisma.booking.count({
       where: {
         wheelchairId,
-        status: { in: ["PENDING", "CONFIRMED"] },
+        status: { in: ACTIVE_BOOKING_STATUSES },
         id: excludeBookingId ? { not: excludeBookingId } : undefined,
-        // Overlap condition: start < endDate AND end > startDate
         AND: [{ startDate: { lte: endDate } }, { endDate: { gte: startDate } }],
       },
     });
 
-    return overlap === null;
+    return overlapCount < wheelchair.stockQuantity;
+  }
+
+  async getAvailabilitySummary(
+    wheelchairId: string,
+    startDate: Date,
+    endDate: Date,
+    excludeBookingId?: string,
+  ) {
+    const wheelchair = await prisma.wheelchair.findUnique({
+      where: { id: wheelchairId },
+      select: {
+        id: true,
+        stockQuantity: true,
+        status: true,
+      },
+    });
+
+    if (!wheelchair) {
+      throw new Error("Wheelchair not found");
+    }
+
+    const bookedQuantity = await prisma.booking.count({
+      where: {
+        wheelchairId,
+        status: { in: ACTIVE_BOOKING_STATUSES },
+        id: excludeBookingId ? { not: excludeBookingId } : undefined,
+        AND: [{ startDate: { lte: endDate } }, { endDate: { gte: startDate } }],
+      },
+    });
+
+    return {
+      wheelchairId,
+      totalStock: wheelchair.stockQuantity,
+      bookedQuantity,
+      availableStock: Math.max(wheelchair.stockQuantity - bookedQuantity, 0),
+      wheelchairStatus: wheelchair.status,
+    };
+  }
+
+  async listInventorySummary(startDate: Date, endDate: Date) {
+    const wheelchairs = await prisma.wheelchair.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+
+    const summaries = await Promise.all(
+      wheelchairs.map(async (wheelchair) => ({
+        ...wheelchair,
+        inventory: await this.getAvailabilitySummary(
+          wheelchair.id,
+          startDate,
+          endDate,
+        ),
+      })),
+    );
+
+    return summaries;
   }
 
   // ─── Calculate price ───────────────────────────────────────

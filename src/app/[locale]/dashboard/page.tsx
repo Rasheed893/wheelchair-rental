@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import BookingCard from "@/components/booking/BookingCard";
 import { useAuth } from "@/hooks/useAuth";
 import type { BookingWithRelations } from "@/types";
+import { formatAED } from "@/lib/currency";
 
 export default function DashboardPage({
   params,
@@ -127,10 +128,11 @@ export default function DashboardPage({
           },
           {
             label: isAr ? "إجمالي الإنفاق" : "Total Spent",
-            value: `$${bookings
+            value: formatAED(
+              bookings
               .filter((booking) => booking.status === "CONFIRMED")
-              .reduce((sum, booking) => sum + Number(booking.totalPrice), 0)
-              .toFixed(2)}`,
+              .reduce((sum, booking) => sum + Number(booking.totalPrice), 0),
+            ),
             color: "text-primary-600",
           },
         ].map((stat) => (

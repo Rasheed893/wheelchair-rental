@@ -2,6 +2,7 @@
 import { format } from "date-fns";
 import Link from "next/link";
 import type { BookingWithRelations } from "@/types";
+import { formatAED } from "@/lib/currency";
 
 interface Props {
   bookings: BookingWithRelations[];
@@ -59,7 +60,7 @@ export function RecentBookings({ bookings, locale, showUser = false }: Props) {
             </div>
             <div className="text-right shrink-0">
               <p className="font-bold text-slate-900 text-sm">
-                ${Number(booking.totalPrice).toFixed(2)}
+                {formatAED(Number(booking.totalPrice))}
               </p>
               <Link
                 href={`/${locale}/dashboard/bookings/${booking.id}`}

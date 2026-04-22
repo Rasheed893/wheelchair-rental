@@ -1,1 +1,4 @@
-export { runtime, POST } from "@/app/api/stripe/webhook/route";
+import { POST } from "@/app/api/stripe/webhook/route";
+
+export const runtime = "nodejs";
+export { POST };
