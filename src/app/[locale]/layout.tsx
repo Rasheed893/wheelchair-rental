@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Footer from "@/components/layout/Footer";
 import Navbar from "@/components/layout/Navbar";
 import { locales } from "@/lib/i18n";
+import WhatsAppButton from "@/components/layout/WhatsAppButton";
 
 export const metadata: Metadata = {
   title: { template: "%s | WheelRent", default: "WheelRent" },
@@ -34,6 +35,7 @@ export default async function LocaleLayout({ children, params }: Props) {
         <Navbar locale={locale} />
         <main className="flex-1">{children}</main>
         <Footer locale={locale} />
+        <WhatsAppButton number={process.env.ORDER_PHONE!} />
       </div>
     </NextIntlClientProvider>
   );

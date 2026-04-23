@@ -53,7 +53,10 @@ export class BookingService {
     );
 
     if (availability.availableStock < 1) {
-      throw new Error("Selected wheelchair is out of stock for those dates");
+      throw new Error(
+        "Selected wheelchair is out of stock for those dates Please contact support for assistance at " +
+          process.env.SUPPORT_PHONE,
+      );
     }
 
     const { days, totalPrice } = await wheelchairService.calculatePrice(
@@ -254,7 +257,9 @@ export class BookingService {
     const skip = (page - 1) * pageSize;
     const where = {
       ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.paymentStatus ? { paymentStatus: filters.paymentStatus } : {}),
+      ...(filters.paymentStatus
+        ? { paymentStatus: filters.paymentStatus }
+        : {}),
       ...(filters.query
         ? {
             OR: [

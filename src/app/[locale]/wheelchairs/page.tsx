@@ -4,8 +4,8 @@ import WheelchairCard from "@/components/wheelchair/WheelchairCard";
 import type { WheelchairCategory } from "@prisma/client";
 
 interface Props {
-  params: { locale: string };
-  searchParams: { category?: string; search?: string; page?: string };
+  params: Promise<{ locale: string }>;
+  searchParams?: Promise<{ category?: string; search?: string; page?: string }>;
 }
 
 const CATEGORIES: {
@@ -51,12 +51,13 @@ async function getWheelchairs(category?: string, search?: string, page = 1) {
 }
 
 export default async function WheelchairsPage({ params, searchParams }: Props) {
-  const { locale } = params;
+  const { locale } = await params;
+  const resolvedSearchParams = await searchParams;
   const isAr = locale === "ar";
-  const page = Number(searchParams.page ?? 1);
+  const page = Number(resolvedSearchParams?.page ?? 1);
   const { wheelchairs, total, totalPages } = await getWheelchairs(
-    searchParams.category,
-    searchParams.search,
+    resolvedSearchParams?.category,
+    resolvedSearchParams?.search,
     page,
   );
 
@@ -79,8 +80,8 @@ export default async function WheelchairsPage({ params, searchParams }: Props) {
             key={cat.value}
             href={`/${locale}/wheelchairs${cat.value !== "ALL" ? `?category=${cat.value}` : ""}`}
             className={`px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
-              searchParams.category === cat.value ||
-              (!searchParams.category && cat.value === "ALL")
+              resolvedSearchParams?.category === cat.value ||
+              (!resolvedSearchParams?.category && cat.value === "ALL")
                 ? "bg-primary-600 text-white border-primary-600"
                 : "bg-white text-slate-600 border-slate-200 hover:border-primary-300"
             }`}
@@ -91,17 +92,17 @@ export default async function WheelchairsPage({ params, searchParams }: Props) {
 
         {/* Search */}
         <form method="get" className="ms-auto flex gap-2">
-          {searchParams.category && (
+          {resolvedSearchParams?.category && (
             <input
               type="hidden"
               name="category"
-              value={searchParams.category}
+              value={resolvedSearchParams.category}
             />
           )}
           <input
             type="search"
             name="search"
-            defaultValue={searchParams.search}
+            defaultValue={resolvedSearchParams?.search}
             placeholder={isAr ? "ابحث..." : "Search..."}
             className="input-field w-48 py-2"
           />
@@ -139,7 +140,7 @@ export default async function WheelchairsPage({ params, searchParams }: Props) {
           {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
             <a
               key={p}
-              href={`/${locale}/wheelchairs?${new URLSearchParams({ ...searchParams, page: String(p) })}`}
+              href={`/${locale}/wheelchairs?${new URLSearchParams({ ...(resolvedSearchParams || {}), page: String(p) })}`}
               className={`w-10 h-10 flex items-center justify-center rounded-xl text-sm font-medium border transition-colors ${
                 p === page
                   ? "bg-primary-600 text-white border-primary-600"

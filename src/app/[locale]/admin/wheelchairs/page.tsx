@@ -7,10 +7,10 @@ import { wheelchairService } from "@/services/wheelchair.service";
 
 interface Props {
   params: Promise<{ locale: string }>;
-  searchParams?: {
+  searchParams?: Promise<{
     startDate?: string;
     endDate?: string;
-  };
+  }>;
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -30,6 +30,7 @@ export default async function AdminWheelchairsPage({
   searchParams,
 }: Props) {
   const { locale } = await params;
+  const resolvedSearchParams = await searchParams;
   const user = await getCurrentUser();
 
   if (!user || user.role !== "ADMIN") {
@@ -40,8 +41,8 @@ export default async function AdminWheelchairsPage({
   const defaultEnd = new Date(today);
   defaultEnd.setDate(defaultEnd.getDate() + 7);
 
-  const startDate = toDateOrDefault(searchParams?.startDate, today);
-  const endDate = toDateOrDefault(searchParams?.endDate, defaultEnd);
+  const startDate = toDateOrDefault(resolvedSearchParams?.startDate, today);
+  const endDate = toDateOrDefault(resolvedSearchParams?.endDate, defaultEnd);
 
   const wheelchairs = await wheelchairService.listInventorySummary(
     startDate,

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatAED } from "@/lib/currency";
+import ImageGallery from "@/components/wheelchair/ImageGallery";
 
 // interface Props {
 //   params: { locale: string; id: string };
@@ -71,7 +72,10 @@ export default async function WheelchairDetailPage({ params }: Props) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         {/* Images */}
-        <div className="space-y-3">
+        <div>
+          <ImageGallery images={wheelchair.images ?? []} name={name} />
+        </div>
+        {/* <div className="space-y-3">
           <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-slate-100">
             {wheelchair.images?.[0] ? (
               <Image
@@ -105,7 +109,7 @@ export default async function WheelchairDetailPage({ params }: Props) {
               ))}
             </div>
           )}
-        </div>
+        </div> */}
 
         {/* Info */}
         <div>
