@@ -1,5 +1,11 @@
 import { NextRequest } from "next/server";
-import { withAdminAuth, ok, badRequest, notFound, serverError } from "@/lib/middleware";
+import {
+  withAdminAuth,
+  ok,
+  badRequest,
+  notFound,
+  serverError,
+} from "@/lib/middleware";
 import { wheelchairService } from "@/services/wheelchair.service";
 import { updateWheelchairSchema } from "@/validators/wheelchair.validator";
 
@@ -14,11 +20,16 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       return notFound("Wheelchair");
     }
 
-    return ok(wheelchair);
+    // ✅ Tell Vercel edge never to cache this response
+    const response = ok(wheelchair);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   } catch (error) {
     return serverError(error);
   }
 }
+
+import { revalidatePath } from "next/cache";
 
 export const PUT = withAdminAuth(async (req, { params }) => {
   try {
@@ -33,6 +44,13 @@ export const PUT = withAdminAuth(async (req, { params }) => {
     }
 
     const wheelchair = await wheelchairService.update(params.id, parsed.data);
+
+    // ✅ Bust the static detail page cache for both locales
+    revalidatePath(`/en/wheelchairs/${params.id}`);
+    revalidatePath(`/ar/wheelchairs/${params.id}`);
+    revalidatePath(`/en/wheelchairs`);
+    revalidatePath(`/ar/wheelchairs`);
+
     return ok(wheelchair);
   } catch (error) {
     return serverError(error);
