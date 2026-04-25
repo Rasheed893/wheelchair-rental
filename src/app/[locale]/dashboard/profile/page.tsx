@@ -58,13 +58,41 @@ export default function ProfilePage({
   async function onSubmit(data: FormData) {
     setError(null);
     setSuccess(false);
-    // Profile update would go to a dedicated API endpoint
-    // For now, update localStorage name
-    const updated = { ...user, name: data.name };
-    localStorage.setItem("wr_user", JSON.stringify(updated));
-    login(updated as any);
-    setSuccess(true);
-    setTimeout(() => setSuccess(false), 3000);
+
+    try {
+      // Handle password change if provided
+      if (data.currentPassword && data.newPassword) {
+        const res = await fetch("/api/auth/change-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            currentPassword: data.currentPassword,
+            newPassword: data.newPassword,
+          }),
+        });
+
+        const json = await res.json();
+
+        if (!json.success) {
+          setError(json.error);
+          return;
+        }
+
+        // Clear password fields
+        reset({ name: data.name, phone: data.phone });
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      } else {
+        // Just update name locally (profile API could be added later)
+        const updated = { ...user, name: data.name };
+        localStorage.setItem("wr_user", JSON.stringify(updated));
+        login(updated as any);
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    }
   }
 
   return (

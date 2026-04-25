@@ -142,8 +142,14 @@ export default async function WheelchairsPage({ params, searchParams }: Props) {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {wheelchairs.map((w) => (
-            <WheelchairCard key={w.id} wheelchair={w as any} locale={locale} />
+          {wheelchairs.map((w, i) => (
+            <WheelchairCard
+              key={w.id}
+              wheelchair={w as any}
+              locale={locale}
+              // Task 8: preload first 4 cards on listing page (above fold)
+              priority={i < 4}
+            />
           ))}
         </div>
       )}
