@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { AuthUser, Role } from "@/types";
 import { COOKIE_NAME, verifyToken } from "./auth";
+import { prisma } from "./prisma";
 
 type RouteParams = Record<string, string>;
 type RouteContext = { params: RouteParams; user: AuthUser };
@@ -59,18 +60,62 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
       );
     }
 
+    const dbUser = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+      },
+    });
+
+    if (!dbUser) {
+      console.warn("[AUTH] token subject does not exist in database", {
+        pathname,
+        method: req.method,
+        userId: payload.sub,
+      });
+
+      const response = NextResponse.json(
+        { success: false, error: "Your session is no longer valid. Please sign in again." },
+        { status: 401 },
+      );
+      response.cookies.set(COOKIE_NAME, "", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 0,
+        path: "/",
+      });
+      return response;
+    }
+
+    if (allowedRoles && !allowedRoles.includes(dbUser.role)) {
+      console.warn("[AUTH] forbidden by current database role", {
+        pathname,
+        method: req.method,
+        role: dbUser.role,
+        allowedRoles,
+      });
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 },
+      );
+    }
+
     console.log("[AUTH] authorized", {
       pathname,
       method: req.method,
-      userId: payload.sub,
-      role: payload.role,
+      userId: dbUser.id,
+      role: dbUser.role,
     });
 
     const user: AuthUser = {
-      id: payload.sub,
-      email: payload.email,
-      name: payload.name,
-      role: payload.role,
+      id: dbUser.id,
+      email: dbUser.email,
+      name: dbUser.name,
+      role: dbUser.role,
     };
 
     return handler(req, { params: await context.params, user });

@@ -4,6 +4,7 @@ import { stripe } from "@/lib/stripe";
 import type { PaymentIntentResponse } from "@/types";
 import { invoiceService } from "./invoice.service";
 import {
+  sendAdminBookingNotificationEmail,
   sendBookingConfirmationEmail,
   sendCashPaymentReceivedEmail,
 } from "@/lib/emails/send-booking-confirmation-email";
@@ -13,6 +14,7 @@ const CURRENCY = "aed";
 
 type EmailMetadata = {
   bookingConfirmationCustomerSentAt?: string;
+  bookingConfirmationAdminSentAt?: string;
   paymentConfirmationSentAt?: string;
   [key: string]: unknown;
 };
@@ -324,18 +326,36 @@ export class PaymentService {
       console.log("[PAYMENT] Booking already marked paid, verifying email idempotency state");
     }
 
+    const paidBooking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        user: { select: { email: true, name: true } },
+        wheelchair: { select: { name: true } },
+        payment: { select: { metadata: true } },
+      },
+    });
+
+    if (!paidBooking) {
+      console.error("[PAYMENT] Booking missing after payment success update", {
+        bookingId,
+        intentId: intent.id,
+      });
+      return;
+    }
+
     await this.sendBookingEmailsForPaidBooking({
-      bookingId,
-      customerEmail: booking.user.email,
-      customerName: booking.user.name,
-      phoneNumber: booking.phoneNumber,
-      deliveryAddress: booking.deliveryAddress,
-      deliveryNotes: booking.deliveryNotes ?? undefined,
-      wheelchairName: booking.wheelchair.name,
-      startDate: booking.startDate,
-      endDate: booking.endDate,
-      subtotal: Number(booking.totalPrice),
-      paymentMethod: "ONLINE",
+      bookingId: paidBooking.id,
+      customerEmail: paidBooking.user.email,
+      customerName: paidBooking.user.name,
+      phoneNumber: paidBooking.phoneNumber,
+      deliveryAddress: paidBooking.deliveryAddress,
+      deliveryNotes: paidBooking.deliveryNotes ?? undefined,
+      wheelchairName: paidBooking.wheelchair.name,
+      startDate: paidBooking.startDate,
+      endDate: paidBooking.endDate,
+      subtotal: Number(paidBooking.totalPrice),
+      paymentMethod: paidBooking.paymentMethod,
+      paymentStatus: paidBooking.paymentStatus,
     });
   }
 
@@ -697,6 +717,7 @@ export class PaymentService {
     endDate,
     subtotal,
     paymentMethod,
+    paymentStatus,
   }: {
     bookingId: string;
     customerEmail: string;
@@ -709,12 +730,22 @@ export class PaymentService {
     endDate: Date;
     subtotal: number;
     paymentMethod: "ONLINE" | "CASH";
+    paymentStatus: "PENDING" | "PAID";
   }) {
     const payment = await prisma.payment.findUnique({
       where: { bookingId },
       select: { metadata: true },
     });
     const metadata = this.getPaymentMetadata(payment?.metadata);
+
+    if (paymentMethod === "ONLINE" && paymentStatus !== "PAID") {
+      console.warn("[EMAIL] Skipping booking confirmation because online booking is not marked paid", {
+        bookingId,
+        paymentMethod,
+        paymentStatus,
+      });
+      return;
+    }
 
     if (!metadata.bookingConfirmationCustomerSentAt) {
       await sendBookingConfirmationEmail({
@@ -729,7 +760,7 @@ export class PaymentService {
         subtotal,
         bookingId,
         paymentMethod,
-        paymentStatus: "PAID",
+        paymentStatus,
       });
       await this.markPaymentEmailMetadata(bookingId, {
         bookingConfirmationCustomerSentAt: new Date().toISOString(),
@@ -738,6 +769,31 @@ export class PaymentService {
       console.log("[EMAIL] Customer paid booking confirmation already sent, skipping duplicate", {
         bookingId,
         sentAt: metadata.bookingConfirmationCustomerSentAt,
+      });
+    }
+
+    if (!metadata.bookingConfirmationAdminSentAt) {
+      await sendAdminBookingNotificationEmail({
+        to: customerEmail,
+        customerName,
+        phoneNumber,
+        deliveryAddress,
+        deliveryNotes,
+        wheelchairName,
+        startDate,
+        endDate,
+        subtotal,
+        bookingId,
+        paymentMethod,
+        paymentStatus,
+      });
+      await this.markPaymentEmailMetadata(bookingId, {
+        bookingConfirmationAdminSentAt: new Date().toISOString(),
+      });
+    } else {
+      console.log("[EMAIL] Admin paid booking notification already sent, skipping duplicate", {
+        bookingId,
+        sentAt: metadata.bookingConfirmationAdminSentAt,
       });
     }
 

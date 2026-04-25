@@ -9,9 +9,7 @@ import type { CreateBookingInput } from "@/validators/booking.validator";
 import { wheelchairService } from "./wheelchair.service";
 import { invoiceService } from "./invoice.service";
 import {
-  sendAdminBookingNotificationEmail,
   sendBookingCancelledEmail,
-  sendBookingConfirmationEmail,
   sendBookingStatusUpdateEmail,
 } from "@/lib/emails/send-booking-confirmation-email";
 import {
@@ -24,6 +22,15 @@ export class BookingService {
     userId: string,
     input: CreateBookingInput,
   ): Promise<BookingWithRelations> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true },
+    });
+
+    if (!user) {
+      throw new Error("Your session is no longer valid. Please sign in again.");
+    }
+
     const wheelchairId = input.wheelchairId.trim();
     const startDate = new Date(input.startDate);
     const endDate = new Date(input.endDate);
@@ -67,7 +74,7 @@ export class BookingService {
 
     const booking = await prisma.booking.create({
       data: {
-        userId,
+        userId: user.id,
         wheelchairId,
         startDate,
         endDate,
@@ -91,7 +98,7 @@ export class BookingService {
 
     if (input.fullName !== booking.user.name) {
       await prisma.user.update({
-        where: { id: userId },
+        where: { id: user.id },
         data: { name: input.fullName },
       });
       booking.user.name = input.fullName;
@@ -104,54 +111,8 @@ export class BookingService {
       customerEmail: booking.user.email,
     });
 
-    try {
-      const { sendAdminBookingNotificationEmail } =
-        await import("@/lib/emails/send-booking-confirmation-email");
-
-      await sendAdminBookingNotificationEmail({
-        to: process.env.ADMIN_EMAIL ?? "admin@yourdomain.com",
-        customerName: booking.user.name,
-        phoneNumber: booking.phoneNumber,
-        deliveryAddress: booking.deliveryAddress,
-        deliveryNotes: booking.deliveryNotes ?? undefined,
-        wheelchairName: booking.wheelchair.name,
-        startDate: booking.startDate,
-        endDate: booking.endDate,
-        subtotal: Number(booking.totalPrice),
-        bookingId: booking.id,
-        paymentMethod: booking.paymentMethod,
-        paymentStatus: "PAID",
-      });
-    } catch (error) {
-      console.error("[EMAIL] Admin notification after payment failed", {
-        bookingId: booking.id,
-        error,
-      });
-    }
-
     if (input.paymentMethod === "CASH") {
-      await invoiceService.generate(booking.id, userId);
-      try {
-        await sendBookingConfirmationEmail({
-          to: booking.user.email,
-          customerName: booking.user.name,
-          phoneNumber: booking.phoneNumber,
-          deliveryAddress: booking.deliveryAddress,
-          deliveryNotes: booking.deliveryNotes ?? undefined,
-          wheelchairName: booking.wheelchair.name,
-          startDate: booking.startDate,
-          endDate: booking.endDate,
-          subtotal: Number(booking.totalPrice),
-          bookingId: booking.id,
-          paymentMethod: booking.paymentMethod,
-          paymentStatus: booking.paymentStatus,
-        });
-      } catch (error) {
-        console.error("[EMAIL] Customer booking confirmation failed", {
-          bookingId: booking.id,
-          error,
-        });
-      }
+      await invoiceService.generate(booking.id, user.id);
     }
 
     return booking as BookingWithRelations;
