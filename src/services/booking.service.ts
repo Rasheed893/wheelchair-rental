@@ -104,26 +104,29 @@ export class BookingService {
       customerEmail: booking.user.email,
     });
 
-    try {
-      await sendAdminBookingNotificationEmail({
-        to: booking.user.email,
-        customerName: booking.user.name,
-        phoneNumber: booking.phoneNumber,
-        deliveryAddress: booking.deliveryAddress,
-        deliveryNotes: booking.deliveryNotes ?? undefined,
-        wheelchairName: booking.wheelchair.name,
-        startDate: booking.startDate,
-        endDate: booking.endDate,
-        subtotal: Number(booking.totalPrice),
-        bookingId: booking.id,
-        paymentMethod: booking.paymentMethod,
-        paymentStatus: booking.paymentStatus,
-      });
-    } catch (error) {
-      console.error("[EMAIL] Admin booking email failed", {
-        bookingId: booking.id,
-        error,
-      });
+    // ✅ Notify admin ONLY for CASH bookings
+    if (input.paymentMethod === "CASH") {
+      try {
+        await sendAdminBookingNotificationEmail({
+          to: process.env.ADMIN_EMAIL ?? "admin@yourdomain.com",
+          customerName: booking.user.name,
+          phoneNumber: booking.phoneNumber,
+          deliveryAddress: booking.deliveryAddress,
+          deliveryNotes: booking.deliveryNotes ?? undefined,
+          wheelchairName: booking.wheelchair.name,
+          startDate: booking.startDate,
+          endDate: booking.endDate,
+          subtotal: Number(booking.totalPrice),
+          bookingId: booking.id,
+          paymentMethod: booking.paymentMethod,
+          paymentStatus: booking.paymentStatus,
+        });
+      } catch (error) {
+        console.error("[EMAIL] Admin booking email failed", {
+          bookingId: booking.id,
+          error,
+        });
+      }
     }
 
     if (input.paymentMethod === "CASH") {
