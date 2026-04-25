@@ -104,29 +104,29 @@ export class BookingService {
       customerEmail: booking.user.email,
     });
 
-    // ✅ Notify admin ONLY for CASH bookings
-    if (input.paymentMethod === "CASH") {
-      try {
-        await sendAdminBookingNotificationEmail({
-          to: process.env.ADMIN_EMAIL ?? "admin@yourdomain.com",
-          customerName: booking.user.name,
-          phoneNumber: booking.phoneNumber,
-          deliveryAddress: booking.deliveryAddress,
-          deliveryNotes: booking.deliveryNotes ?? undefined,
-          wheelchairName: booking.wheelchair.name,
-          startDate: booking.startDate,
-          endDate: booking.endDate,
-          subtotal: Number(booking.totalPrice),
-          bookingId: booking.id,
-          paymentMethod: booking.paymentMethod,
-          paymentStatus: booking.paymentStatus,
-        });
-      } catch (error) {
-        console.error("[EMAIL] Admin booking email failed", {
-          bookingId: booking.id,
-          error,
-        });
-      }
+    try {
+      const { sendAdminBookingNotificationEmail } =
+        await import("@/lib/emails/send-booking-confirmation-email");
+
+      await sendAdminBookingNotificationEmail({
+        to: process.env.ADMIN_EMAIL ?? "admin@yourdomain.com",
+        customerName: booking.user.name,
+        phoneNumber: booking.phoneNumber,
+        deliveryAddress: booking.deliveryAddress,
+        deliveryNotes: booking.deliveryNotes ?? undefined,
+        wheelchairName: booking.wheelchair.name,
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        subtotal: Number(booking.totalPrice),
+        bookingId: booking.id,
+        paymentMethod: booking.paymentMethod,
+        paymentStatus: "PAID",
+      });
+    } catch (error) {
+      console.error("[EMAIL] Admin notification after payment failed", {
+        bookingId: booking.id,
+        error,
+      });
     }
 
     if (input.paymentMethod === "CASH") {
