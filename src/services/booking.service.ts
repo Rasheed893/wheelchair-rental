@@ -9,6 +9,8 @@ import type { CreateBookingInput } from "@/validators/booking.validator";
 import { wheelchairService } from "./wheelchair.service";
 import { invoiceService } from "./invoice.service";
 import {
+  sendAdminBookingNotificationEmail,
+  sendBookingConfirmationEmail,
   sendBookingCancelledEmail,
   sendBookingStatusUpdateEmail,
 } from "@/lib/emails/send-booking-confirmation-email";
@@ -113,6 +115,50 @@ export class BookingService {
 
     if (input.paymentMethod === "CASH") {
       await invoiceService.generate(booking.id, user.id);
+
+      try {
+        await sendBookingConfirmationEmail({
+          to: booking.user.email,
+          customerName: booking.user.name,
+          phoneNumber: booking.phoneNumber,
+          deliveryAddress: booking.deliveryAddress,
+          deliveryNotes: booking.deliveryNotes ?? undefined,
+          wheelchairName: booking.wheelchair.name,
+          startDate: booking.startDate,
+          endDate: booking.endDate,
+          subtotal: Number(booking.totalPrice),
+          bookingId: booking.id,
+          paymentMethod: "CASH",
+          paymentStatus: "PENDING",
+        });
+      } catch (error) {
+        console.error("[EMAIL] Cash booking confirmation failed", {
+          bookingId: booking.id,
+          error,
+        });
+      }
+
+      try {
+        await sendAdminBookingNotificationEmail({
+          to: booking.user.email,
+          customerName: booking.user.name,
+          phoneNumber: booking.phoneNumber,
+          deliveryAddress: booking.deliveryAddress,
+          deliveryNotes: booking.deliveryNotes ?? undefined,
+          wheelchairName: booking.wheelchair.name,
+          startDate: booking.startDate,
+          endDate: booking.endDate,
+          subtotal: Number(booking.totalPrice),
+          bookingId: booking.id,
+          paymentMethod: "CASH",
+          paymentStatus: "PENDING",
+        });
+      } catch (error) {
+        console.error("[EMAIL] Cash admin booking notification failed", {
+          bookingId: booking.id,
+          error,
+        });
+      }
     }
 
     return booking as BookingWithRelations;
