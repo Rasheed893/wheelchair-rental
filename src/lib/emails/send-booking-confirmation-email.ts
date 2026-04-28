@@ -18,6 +18,22 @@ type BookingEmailInput = {
   paymentStatus: "PENDING" | "PAID";
 };
 
+type PaymentConfirmationEmailInput = {
+  to: string;
+  customerName: string;
+  customerEmail?: string;
+  phoneNumber: string;
+  deliveryAddress: string;
+  wheelchairName: string;
+  startDate: Date;
+  endDate: Date;
+  bookingId: string;
+  invoiceNumber?: string;
+  invoiceUrl?: string | null;
+  totalAmount: number;
+  paymentMethod: "ONLINE" | "CASH";
+};
+
 function maskEmail(value?: string | null) {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -179,6 +195,92 @@ export async function sendCashPaymentReceivedEmail({
     });
     throw error;
   }
+}
+
+export async function sendCustomerPaymentConfirmationEmail(
+  input: PaymentConfirmationEmailInput,
+) {
+  const formatDate = (value: Date) =>
+    new Intl.DateTimeFormat("en-AE", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: "Asia/Dubai",
+    }).format(value);
+
+  await sendEmail({
+    to: [input.to],
+    subject: `Payment received for booking ${input.bookingId}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+        <h2 style="margin-bottom:8px">Payment confirmed</h2>
+        <p>Hi ${input.customerName},</p>
+        <p>We’ve received your payment for booking <strong>${input.bookingId}</strong>. Your invoice is ready.</p>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin:20px 0">
+          <p style="margin:0 0 8px"><strong>Wheelchair:</strong> ${input.wheelchairName}</p>
+          <p style="margin:0 0 8px"><strong>Rental dates:</strong> ${formatDate(input.startDate)} to ${formatDate(input.endDate)}</p>
+          <p style="margin:0 0 8px"><strong>Delivery address:</strong> ${input.deliveryAddress}</p>
+          <p style="margin:0 0 8px"><strong>Phone:</strong> ${input.phoneNumber}</p>
+          <p style="margin:0"><strong>Total paid:</strong> AED ${input.totalAmount.toFixed(2)}</p>
+        </div>
+        ${
+          input.invoiceNumber
+            ? `<p><strong>Invoice number:</strong> ${input.invoiceNumber}</p>`
+            : ""
+        }
+        ${
+          input.invoiceUrl
+            ? `<p><a href="${input.invoiceUrl}" style="display:inline-block;background:#0f766e;color:#ffffff;padding:10px 16px;border-radius:8px;text-decoration:none">Download your invoice PDF</a></p>`
+            : "<p>Your invoice is being prepared and will be available shortly.</p>"
+        }
+        <p>Thank you for choosing WheelRent.</p>
+      </div>
+    `,
+  });
+}
+
+export async function sendAdminPaymentConfirmationEmail(
+  input: PaymentConfirmationEmailInput,
+) {
+  const adminEmail = process.env.ADMIN_EMAIL?.trim();
+  if (!adminEmail) {
+    return { skipped: true as const, reason: "ADMIN_EMAIL is empty" };
+  }
+
+  const formatDate = (value: Date) =>
+    new Intl.DateTimeFormat("en-AE", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: "Asia/Dubai",
+    }).format(value);
+
+  await sendEmail({
+    to: [adminEmail],
+    subject: `[ADMIN] Payment confirmed for booking ${input.bookingId}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+        <h2 style="margin-bottom:8px">Payment confirmation</h2>
+        <p><strong>Booking ID:</strong> ${input.bookingId}</p>
+        <p><strong>Customer:</strong> ${input.customerName}</p>
+        <p><strong>Email:</strong> ${input.customerEmail ?? "Not available"}</p>
+        <p><strong>Phone:</strong> ${input.phoneNumber}</p>
+        <p><strong>Payment method:</strong> ${input.paymentMethod}</p>
+        <p><strong>Payment status:</strong> PAID</p>
+        <p><strong>Wheelchair:</strong> ${input.wheelchairName}</p>
+        <p><strong>Rental dates:</strong> ${formatDate(input.startDate)} to ${formatDate(input.endDate)}</p>
+        <p><strong>Total paid:</strong> AED ${input.totalAmount.toFixed(2)}</p>
+        <p><strong>Invoice number:</strong> ${input.invoiceNumber ?? "Pending"}</p>
+        <p><strong>Invoice link:</strong> ${
+          input.invoiceUrl
+            ? `<a href="${input.invoiceUrl}">${input.invoiceUrl}</a>`
+            : "Not available"
+        }</p>
+      </div>
+    `,
+  });
+
+  return { skipped: false as const };
 }
 
 export async function sendBookingCancelledEmail({

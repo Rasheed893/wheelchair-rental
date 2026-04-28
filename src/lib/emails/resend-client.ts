@@ -29,10 +29,16 @@ export async function sendEmail({
   to,
   subject,
   html,
+  attachments,
 }: {
   to: string[];
   subject: string;
   html: string;
+  attachments?: Array<{
+    filename: string;
+    path?: string;
+    content?: string;
+  }>;
 }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
@@ -70,6 +76,7 @@ export async function sendEmail({
       to,
       subject,
       html,
+      attachments,
     }),
   });
 

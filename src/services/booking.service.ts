@@ -7,10 +7,9 @@ import type {
 } from "@/types";
 import type { CreateBookingInput } from "@/validators/booking.validator";
 import { wheelchairService } from "./wheelchair.service";
-import { invoiceService } from "./invoice.service";
 import {
-  sendAdminBookingNotificationEmail,
   sendBookingConfirmationEmail,
+  sendAdminBookingNotificationEmail,
   sendBookingCancelledEmail,
   sendBookingStatusUpdateEmail,
 } from "@/lib/emails/send-booking-confirmation-email";
@@ -114,8 +113,6 @@ export class BookingService {
     });
 
     if (input.paymentMethod === "CASH") {
-      await invoiceService.generate(booking.id, user.id);
-
       try {
         await sendBookingConfirmationEmail({
           to: booking.user.email,

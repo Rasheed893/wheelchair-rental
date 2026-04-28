@@ -36,7 +36,11 @@ export function PaymentSuccessSync({
         });
         const data = await res.json();
 
-        if (!res.ok || !data?.success) {
+        if (
+          !res.ok ||
+          data?.success !== true ||
+          data?.data?.paymentStatus !== "PAID"
+        ) {
           console.error("[SUCCESS SYNC] Payment sync failed", data);
           onSyncFailed?.();
           return;

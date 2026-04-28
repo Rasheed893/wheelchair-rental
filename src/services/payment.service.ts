@@ -4,9 +4,8 @@ import { stripe } from "@/lib/stripe";
 import type { PaymentIntentResponse } from "@/types";
 import { invoiceService } from "./invoice.service";
 import {
-  sendAdminBookingNotificationEmail,
-  sendBookingConfirmationEmail,
-  sendCashPaymentReceivedEmail,
+  sendAdminPaymentConfirmationEmail,
+  sendCustomerPaymentConfirmationEmail,
 } from "@/lib/emails/send-booking-confirmation-email";
 import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
 
@@ -15,8 +14,17 @@ const CURRENCY = "aed";
 type EmailMetadata = {
   bookingConfirmationCustomerSentAt?: string;
   bookingConfirmationAdminSentAt?: string;
+  invoiceGeneratedAt?: string;
   paymentConfirmationSentAt?: string;
+  paymentConfirmationCustomerSentAt?: string;
+  paymentConfirmationAdminSentAt?: string;
   [key: string]: unknown;
+};
+
+type InvoiceNotificationData = {
+  invoiceNumber?: string;
+  invoiceUrl?: string | null;
+  totalAmount: number;
 };
 
 function toJson<T>(value: T) {
@@ -40,7 +48,12 @@ export class PaymentService {
     paymentIntentId: string,
     userId: string,
     expectedBookingId?: string,
-  ): Promise<{ processed: boolean; reason?: string; bookingId?: string }> {
+  ): Promise<{
+    processed: boolean;
+    reason?: string;
+    bookingId?: string;
+    paymentStatus?: "PENDING" | "PAID";
+  }> {
     const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     const bookingId = intent.metadata?.bookingId;
@@ -74,7 +87,21 @@ export class PaymentService {
     }
 
     await this.onPaymentSucceeded(intent);
-    return { processed: true, bookingId };
+
+    const updatedBooking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { paymentStatus: true },
+    });
+
+    return {
+      processed: updatedBooking?.paymentStatus === "PAID",
+      bookingId,
+      paymentStatus: updatedBooking?.paymentStatus,
+      reason:
+        updatedBooking?.paymentStatus === "PAID"
+          ? undefined
+          : "Payment has not been marked as PAID yet",
+    };
   }
 
   async createIntent(
@@ -116,18 +143,6 @@ export class PaymentService {
       }
     }
 
-    console.log("[CREATE INTENT] Booking from DB:", {
-      id: booking.id,
-      status: booking.status,
-      totalPrice: booking.totalPrice,
-    });
-
-    console.log("[CREATE INTENT] Metadata to Stripe:", {
-      bookingId: booking.id,
-      userId,
-      wheelchairId: booking.wheelchairId,
-    });
-
     const intent = await stripe.paymentIntents.create({
       amount: amountInMinorUnit,
       currency: CURRENCY,
@@ -142,13 +157,6 @@ export class PaymentService {
       },
       description: `Wheelchair rental: ${booking.wheelchair.name} (${booking.totalDays} days, incl. VAT)`,
     });
-    console.log("[CREATE INTENT] Stripe intent created:", {
-      id: intent.id,
-      metadata: intent.metadata,
-    });
-
-    const verifyIntent = await stripe.paymentIntents.retrieve(intent.id);
-    console.log("[VERIFY INTENT] Metadata from Stripe:", verifyIntent.metadata);
 
     await prisma.payment.upsert({
       where: { bookingId: booking.id },
@@ -178,64 +186,28 @@ export class PaymentService {
   }
 
   async handleWebhook(event: import("stripe").Stripe.Event): Promise<void> {
-    console.log("[WEBHOOK] Enter handleWebhook", {
-      id: event.id,
-      type: event.type,
-      livemode: event.livemode,
-      apiVersion: event.api_version,
-      created: event.created,
-    });
-
     switch (event.type) {
       case "payment_intent.succeeded": {
-        console.log("[WEBHOOK] payment_intent.succeeded received");
         const object = event.data.object as { object?: string };
         if (object?.object !== "payment_intent") {
-          console.error("[WEBHOOK] Unexpected succeeded payload object", {
-            eventId: event.id,
-            eventType: event.type,
-            objectType: object?.object,
-          });
           return;
         }
 
         const intent = event.data.object as import("stripe").Stripe.PaymentIntent;
-        console.log("[WEBHOOK] Routing succeeded intent", {
-          id: intent.id,
-          status: intent.status,
-          metadata: intent.metadata,
-        });
         await this.onPaymentSucceeded(intent);
-        console.log("[WEBHOOK] onPaymentSucceeded completed", {
-          paymentIntentId: intent.id,
-        });
         break;
       }
       case "payment_intent.payment_failed": {
         const intent = event.data.object as import("stripe").Stripe.PaymentIntent;
-        console.log("[WEBHOOK] Routing failed intent", {
-          id: intent.id,
-          status: intent.status,
-        });
         await this.onPaymentFailed(intent);
         break;
       }
       case "charge.refunded": {
         const charge = event.data.object as import("stripe").Stripe.Charge;
-        console.log("[WEBHOOK] Routing refunded charge", {
-          id: charge.id,
-          paymentIntent: charge.payment_intent,
-          amountRefunded: charge.amount_refunded,
-        });
         await this.onRefunded(charge);
         break;
       }
       default:
-        console.warn("[WEBHOOK] Unhandled event type", {
-          id: event.id,
-          type: event.type,
-          object: (event.data.object as { object?: string } | null)?.object,
-        });
         break;
     }
   }
@@ -243,20 +215,8 @@ export class PaymentService {
   private async onPaymentSucceeded(
     intent: import("stripe").Stripe.PaymentIntent,
   ) {
-    console.log("[WEBHOOK] FULL INTENT OBJECT:");
-    console.log(JSON.stringify(intent, null, 2));
-    console.log("[PAYMENT] onPaymentSucceeded ENTERED");
-    console.log("[PAYMENT] Intent ID:", intent.id);
-    console.log("[PAYMENT] Metadata:", intent.metadata);
     const bookingId = intent.metadata.bookingId;
-
-    console.log("[PAYMENT] Extracted bookingId:", bookingId);
-
     if (!bookingId) {
-      console.error(
-        `[Webhook] Missing bookingId metadata for intent: ${intent.id}`,
-      );
-      console.error("[PAYMENT] Missing bookingId in metadata");
       return;
     }
 
@@ -268,16 +228,8 @@ export class PaymentService {
         payment: true,
       },
     });
-    console.log("[PAYMENT] Booking fetch result:", {
-      found: Boolean(booking),
-      status: booking?.status,
-      email: booking?.user?.email,
-      bookingPaymentStatus: booking?.paymentStatus,
-      paymentRowStatus: booking?.payment?.status,
-    });
 
     if (!booking) {
-      console.error(`[Webhook] Booking not found for intent: ${intent.id}`);
       return;
     }
 
@@ -306,7 +258,6 @@ export class PaymentService {
             metadata: toJson(intent),
           },
         });
-        console.log("[PAYMENT] Payment updated");
 
         await tx.booking.update({
           where: { id: bookingId },
@@ -318,50 +269,44 @@ export class PaymentService {
           },
         });
       });
-
-      console.log("[PAYMENT] Booking marked paid by Stripe");
-      await invoiceService.generate(bookingId, booking.user.id);
-      console.log("[PAYMENT] Invoice generated");
-    } else {
-      console.log("[PAYMENT] Booking already marked paid, verifying email idempotency state");
     }
 
-    const paidBooking = await prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: {
-        user: { select: { email: true, name: true } },
-        wheelchair: { select: { name: true } },
-        payment: { select: { metadata: true } },
-      },
-    });
+    const invoice = await this.prepareInvoiceNotificationData(
+      bookingId,
+      booking.user.id,
+      Number(
+        booking.payment?.amount ??
+          calculateTotal(Number(booking.totalPrice), VAT_RATE),
+      ),
+    );
 
-    if (!paidBooking) {
-      console.error("[PAYMENT] Booking missing after payment success update", {
-        bookingId,
-        intentId: intent.id,
+    try {
+      await this.sendPaymentConfirmationEmails({
+        bookingId: booking.id,
+        customerEmail: booking.user.email,
+        customerName: booking.user.name,
+        phoneNumber: booking.phoneNumber,
+        deliveryAddress: booking.deliveryAddress,
+        deliveryNotes: booking.deliveryNotes ?? undefined,
+        wheelchairName: booking.wheelchair.name,
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        totalAmount: invoice.totalAmount,
+        paymentMethod: "ONLINE",
+        paymentStatus: "PAID",
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceUrl: invoice.invoiceUrl,
       });
-      return;
+    } catch (error) {
+      console.error("[SUCCESS SYNC] Payment confirmation email failed", {
+        bookingId,
+        error,
+      });
     }
-
-    await this.sendBookingEmailsForPaidBooking({
-      bookingId: paidBooking.id,
-      customerEmail: paidBooking.user.email,
-      customerName: paidBooking.user.name,
-      phoneNumber: paidBooking.phoneNumber,
-      deliveryAddress: paidBooking.deliveryAddress,
-      deliveryNotes: paidBooking.deliveryNotes ?? undefined,
-      wheelchairName: paidBooking.wheelchair.name,
-      startDate: paidBooking.startDate,
-      endDate: paidBooking.endDate,
-      subtotal: Number(paidBooking.totalPrice),
-      paymentMethod: paidBooking.paymentMethod,
-      paymentStatus: paidBooking.paymentStatus,
-    });
   }
 
   private async onPaymentFailed(intent: import("stripe").Stripe.PaymentIntent) {
     const bookingId = intent.metadata.bookingId;
-
     if (!bookingId) {
       return;
     }
@@ -411,58 +356,46 @@ export class PaymentService {
   }
 
   async markCashBookingPaid(bookingId: string) {
-    console.log("[MARK PAID] service entered", { bookingId });
+    const result = await this.finalizeCashBookingPayment(bookingId);
+    return result;
+  }
+
+  async markCashBookingPaidForAdmin(bookingId: string) {
+    const result = await this.finalizeCashBookingPayment(bookingId);
+    return result;
+  }
+
+  private async finalizeCashBookingPayment(bookingId: string) {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
         user: { select: { id: true, email: true, name: true } },
         payment: true,
+        wheelchair: { select: { name: true } },
       },
-    });
-    console.log("[MARK PAID] booking lookup result", {
-      found: Boolean(booking),
-      bookingId,
-      paymentMethod: booking?.paymentMethod,
-      paymentStatus: booking?.paymentStatus,
-      userId: booking?.user?.id,
-      userEmail: booking?.user?.email,
-      paymentMetadata: booking?.payment?.metadata,
     });
 
     if (!booking) {
       throw new Error("Booking not found");
     }
+
     if (booking.paymentMethod !== "CASH") {
       throw new Error("Only CASH bookings can be marked as paid");
     }
 
     if (!isValidEmail(booking.user?.email)) {
-      console.error("[MARK PAID] invalid or missing customer email", {
-        bookingId,
-        userEmail: booking.user?.email,
-      });
       throw new Error("Booking user email is missing or invalid");
     }
 
     const paymentMetadata = this.getPaymentMetadata(booking.payment?.metadata);
     const wasPending = booking.paymentStatus === "PENDING";
-    console.log("[MARK PAID] status check", {
-      bookingId,
-      previousPaymentStatus: booking.paymentStatus,
-      shouldTransitionToPaid: wasPending,
-      paymentConfirmationSentAt: paymentMetadata.paymentConfirmationSentAt,
-    });
 
     if (wasPending) {
-      console.log("[MARK PAID] updating payment status", {
-        bookingId,
-        from: booking.paymentStatus,
-        to: "PAID",
-      });
       await prisma.$transaction(async (tx) => {
         await tx.booking.update({
           where: { id: bookingId },
           data: {
+            status: booking.status === "PENDING" ? "CONFIRMED" : booking.status,
             paymentStatus: "PAID",
             paidAt: new Date(),
           },
@@ -471,7 +404,8 @@ export class PaymentService {
         await tx.payment.upsert({
           where: { bookingId },
           update: {
-            stripePaymentIntentId: booking.payment?.stripePaymentIntentId ?? `cash_${bookingId}`,
+            stripePaymentIntentId:
+              booking.payment?.stripePaymentIntentId ?? `cash_${bookingId}`,
             amount: booking.totalPrice,
             currency: booking.payment?.currency ?? CURRENCY,
             status: "SUCCEEDED",
@@ -496,174 +430,47 @@ export class PaymentService {
           },
         });
       });
-
-      console.log("[PAYMENT] Cash booking marked paid", {
-        bookingId,
-        previousPaymentStatus: booking.paymentStatus,
-        currentPaymentStatus: "PAID",
-      });
-    } else {
-      console.log("[MARK PAID] booking already PAID, checking idempotency guards", {
-        bookingId,
-      });
     }
 
+    const invoice = await this.prepareInvoiceNotificationData(
+      bookingId,
+      booking.user.id,
+      Number(
+        booking.payment?.amount ??
+          calculateTotal(Number(booking.totalPrice), VAT_RATE),
+      ),
+    );
+
     try {
-      console.log("[MARK PAID] calling email भेज", {
-        bookingId,
-        to: booking.user.email,
-        customerName: booking.user.name,
-      });
-      await this.sendCashPaymentConfirmation({
+      await this.sendPaymentConfirmationEmails({
         bookingId,
         customerEmail: booking.user.email,
         customerName: booking.user.name,
+        phoneNumber: booking.phoneNumber,
+        deliveryAddress: booking.deliveryAddress,
+        deliveryNotes: booking.deliveryNotes ?? undefined,
+        wheelchairName: booking.wheelchair.name,
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        totalAmount: invoice.totalAmount,
+        paymentMethod: "CASH",
+        paymentStatus: "PAID",
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceUrl: invoice.invoiceUrl,
       });
-      console.log("[MARK PAID] email flow completed", { bookingId });
     } catch (error) {
-      console.error("[EMAIL ERROR]", {
+      console.error("[CASH PAYMENT] Payment confirmation email failed", {
         bookingId,
-        to: booking.user.email,
         error,
       });
-      throw error;
     }
-
-    const updated = await prisma.booking.findUnique({
-      where: { id: bookingId },
-    });
-
-    return { updated: booking.paymentStatus !== "PAID", booking: updated ?? booking };
-  }
-
-  async markCashBookingPaidForAdmin(bookingId: string) {
-    console.log("[MARK PAID] service entered", { bookingId });
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: {
-        user: { select: { id: true, email: true, name: true } },
-        payment: true,
-      },
-    });
-    console.log("[MARK PAID] booking lookup result", {
-      found: Boolean(booking),
-      bookingId,
-      paymentMethod: booking?.paymentMethod,
-      paymentStatus: booking?.paymentStatus,
-      userId: booking?.user?.id,
-      userEmail: booking?.user?.email,
-      paymentMetadata: booking?.payment?.metadata,
-    });
-
-    if (!booking) {
-      throw new Error("Booking not found");
-    }
-
-    if (booking.paymentMethod !== "CASH") {
-      throw new Error("Only CASH bookings can be marked as paid");
-    }
-
-    if (!isValidEmail(booking.user?.email)) {
-      console.error("[MARK PAID] invalid or missing customer email", {
-        bookingId,
-        userEmail: booking.user?.email,
-      });
-      throw new Error("Booking user email is missing or invalid");
-    }
-
-    const paymentMetadata = this.getPaymentMetadata(booking.payment?.metadata);
-    const wasPending = booking.paymentStatus === "PENDING";
-    console.log("[MARK PAID] status check", {
-      bookingId,
-      previousPaymentStatus: booking.paymentStatus,
-      shouldTransitionToPaid: wasPending,
-      paymentConfirmationSentAt: paymentMetadata.paymentConfirmationSentAt,
-    });
-
-    if (!wasPending) {
-      const updatedBooking = await prisma.booking.findUnique({
-        where: { id: bookingId },
-      });
-
-      console.log("[MARK PAID] skipping email because payment status is already PAID", {
-        bookingId,
-      });
-
-      return {
-        updated: false,
-        booking: updatedBooking ?? booking,
-      };
-    }
-
-    console.log("[MARK PAID] updating payment status", {
-      bookingId,
-      from: booking.paymentStatus,
-      to: "PAID",
-    });
-
-    await prisma.$transaction(async (tx) => {
-      await tx.booking.update({
-        where: { id: bookingId },
-        data: {
-          paymentStatus: "PAID",
-          paidAt: new Date(),
-        },
-      });
-
-      await tx.payment.upsert({
-        where: { bookingId },
-        update: {
-          stripePaymentIntentId:
-            booking.payment?.stripePaymentIntentId ?? `cash_${bookingId}`,
-          amount: booking.totalPrice,
-          currency: booking.payment?.currency ?? CURRENCY,
-          status: "SUCCEEDED",
-          paidAt: new Date(),
-          metadata: toInputJson({
-            ...paymentMetadata,
-            source: "cash",
-            bookingId,
-          }),
-        },
-        create: {
-          bookingId,
-          stripePaymentIntentId: `cash_${bookingId}`,
-          amount: booking.totalPrice,
-          currency: CURRENCY,
-          status: "SUCCEEDED",
-          paidAt: new Date(),
-          metadata: toInputJson({
-            source: "cash",
-            bookingId,
-          }),
-        },
-      });
-    });
-
-    console.log("[PAYMENT] Cash booking marked paid", {
-      bookingId,
-      previousPaymentStatus: booking.paymentStatus,
-      currentPaymentStatus: "PAID",
-    });
-
-    console.log("[MARK PAID] calling email भेज", {
-      bookingId,
-      to: booking.user.email,
-      customerName: booking.user.name,
-    });
-    await this.sendCashPaymentConfirmation({
-      bookingId,
-      customerEmail: booking.user.email,
-      customerName: booking.user.name,
-    });
-    console.log("[MARK PAID] email flow completed", { bookingId });
 
     const updatedBooking = await prisma.booking.findUnique({
       where: { id: bookingId },
     });
 
     return {
-      updated: true,
+      updated: wasPending,
       booking: updatedBooking ?? booking,
     };
   }
@@ -676,6 +483,41 @@ export class PaymentService {
     return metadata as EmailMetadata;
   }
 
+  private async prepareInvoiceNotificationData(
+    bookingId: string,
+    userId: string,
+    fallbackTotalAmount: number,
+  ): Promise<InvoiceNotificationData> {
+    try {
+      const invoice = await invoiceService.generate(bookingId, userId);
+      const invoiceDetails = await invoiceService.getByBooking(bookingId, userId);
+
+      return {
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceUrl: invoiceDetails?.pdfUrl ?? null,
+        totalAmount: Number(invoice.totalAmount),
+      };
+    } catch (error) {
+      console.error("[SUCCESS SYNC] Invoice generation failed", {
+        bookingId,
+        error,
+      });
+
+      const existingInvoice = await invoiceService.getByBooking(bookingId, userId);
+      if (!existingInvoice) {
+        return {
+          totalAmount: fallbackTotalAmount,
+        };
+      }
+
+      return {
+        invoiceNumber: existingInvoice.invoiceNumber,
+        invoiceUrl: existingInvoice.pdfUrl ?? null,
+        totalAmount: Number(existingInvoice.totalAmount),
+      };
+    }
+  }
+
   private async markPaymentEmailMetadata(
     bookingId: string,
     updates: Partial<EmailMetadata>,
@@ -686,10 +528,6 @@ export class PaymentService {
     });
 
     if (!currentPayment) {
-      console.warn("[EMAIL] Cannot persist email metadata because payment row was not found", {
-        bookingId,
-        updates,
-      });
       return;
     }
 
@@ -705,19 +543,20 @@ export class PaymentService {
     });
   }
 
-  private async sendBookingEmailsForPaidBooking({
+  private async sendPaymentConfirmationEmails({
     bookingId,
     customerEmail,
     customerName,
     phoneNumber,
     deliveryAddress,
-    deliveryNotes,
     wheelchairName,
     startDate,
     endDate,
-    subtotal,
+    totalAmount,
     paymentMethod,
     paymentStatus,
+    invoiceNumber,
+    invoiceUrl,
   }: {
     bookingId: string;
     customerEmail: string;
@@ -728,9 +567,11 @@ export class PaymentService {
     wheelchairName: string;
     startDate: Date;
     endDate: Date;
-    subtotal: number;
+    totalAmount: number;
     paymentMethod: "ONLINE" | "CASH";
     paymentStatus: "PENDING" | "PAID";
+    invoiceNumber?: string;
+    invoiceUrl?: string | null;
   }) {
     const payment = await prisma.payment.findUnique({
       where: { bookingId },
@@ -738,118 +579,51 @@ export class PaymentService {
     });
     const metadata = this.getPaymentMetadata(payment?.metadata);
 
-    if (paymentMethod === "ONLINE" && paymentStatus !== "PAID") {
-      console.warn("[EMAIL] Skipping booking confirmation because online booking is not marked paid", {
-        bookingId,
-        paymentMethod,
-        paymentStatus,
-      });
+    if (paymentStatus !== "PAID") {
       return;
     }
 
-    if (!metadata.bookingConfirmationCustomerSentAt) {
-      await sendBookingConfirmationEmail({
+    if (!metadata.paymentConfirmationCustomerSentAt) {
+      const sentAt = new Date().toISOString();
+      await sendCustomerPaymentConfirmationEmail({
         to: customerEmail,
         customerName,
         phoneNumber,
         deliveryAddress,
-        deliveryNotes,
         wheelchairName,
         startDate,
         endDate,
-        subtotal,
         bookingId,
         paymentMethod,
-        paymentStatus,
+        totalAmount,
+        invoiceNumber,
+        invoiceUrl,
       });
       await this.markPaymentEmailMetadata(bookingId, {
-        bookingConfirmationCustomerSentAt: new Date().toISOString(),
-      });
-    } else {
-      console.log("[EMAIL] Customer paid booking confirmation already sent, skipping duplicate", {
-        bookingId,
-        sentAt: metadata.bookingConfirmationCustomerSentAt,
+        paymentConfirmationSentAt: sentAt,
+        paymentConfirmationCustomerSentAt: sentAt,
       });
     }
 
-    if (!metadata.bookingConfirmationAdminSentAt) {
-      await sendAdminBookingNotificationEmail({
+    if (!metadata.paymentConfirmationAdminSentAt) {
+      await sendAdminPaymentConfirmationEmail({
         to: customerEmail,
         customerName,
+        customerEmail,
         phoneNumber,
         deliveryAddress,
-        deliveryNotes,
         wheelchairName,
         startDate,
         endDate,
-        subtotal,
         bookingId,
         paymentMethod,
-        paymentStatus,
+        totalAmount,
+        invoiceNumber,
+        invoiceUrl,
       });
       await this.markPaymentEmailMetadata(bookingId, {
-        bookingConfirmationAdminSentAt: new Date().toISOString(),
+        paymentConfirmationAdminSentAt: new Date().toISOString(),
       });
-    } else {
-      console.log("[EMAIL] Admin paid booking notification already sent, skipping duplicate", {
-        bookingId,
-        sentAt: metadata.bookingConfirmationAdminSentAt,
-      });
-    }
-
-  }
-
-  private async sendCashPaymentConfirmation({
-    bookingId,
-    customerEmail,
-    customerName,
-  }: {
-    bookingId: string;
-    customerEmail: string;
-    customerName: string;
-  }) {
-    console.log("[MARK PAID] sendCashPaymentConfirmation entered", {
-      bookingId,
-      customerEmail,
-    });
-    const payment = await prisma.payment.findUnique({
-      where: { bookingId },
-      select: { metadata: true },
-    });
-    const metadata = this.getPaymentMetadata(payment?.metadata);
-    console.log("[MARK PAID] email idempotency check", {
-      bookingId,
-      paymentConfirmationSentAt: metadata.paymentConfirmationSentAt,
-    });
-
-    if (metadata.paymentConfirmationSentAt) {
-      console.log("[MARK PAID] skipping email because payment confirmation already sent", {
-        bookingId,
-        sentAt: metadata.paymentConfirmationSentAt,
-      });
-      return;
-    }
-
-    try {
-      await sendCashPaymentReceivedEmail({
-        to: customerEmail,
-        customerName,
-        bookingId,
-      });
-
-      await this.markPaymentEmailMetadata(bookingId, {
-        paymentConfirmationSentAt: new Date().toISOString(),
-      });
-      console.log("[MARK PAID] payment confirmation email recorded in metadata", {
-        bookingId,
-      });
-    } catch (error) {
-      console.error("[EMAIL ERROR]", {
-        bookingId,
-        to: customerEmail,
-        error,
-      });
-      throw error;
     }
   }
 }

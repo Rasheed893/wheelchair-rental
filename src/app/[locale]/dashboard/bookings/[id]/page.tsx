@@ -13,6 +13,17 @@ interface Props {
   params: Promise<{ locale: string; id: string }>;
 }
 
+type BookingInvoice = {
+  invoiceNumber: string;
+  subtotal: string | number;
+  taxRate: string | number;
+  taxAmount: string | number;
+  totalAmount: string | number;
+  issuedAt: string | Date;
+  pdfUrl?: string | null;
+  downloadUrl?: string;
+};
+
 const STATUS_BADGE: Record<string, string> = {
   PENDING: "badge-yellow",
   CONFIRMED: "badge-green",
@@ -32,7 +43,7 @@ export default function BookingDetailPage({ params }: Props) {
   const router = useRouter();
 
   const [booking, setBooking] = useState<BookingWithRelations | null>(null);
-  const [invoice, setInvoice] = useState<any | null>(null);
+  const [invoice, setInvoice] = useState<BookingInvoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [supportPhone, setSupportPhone] = useState("");
@@ -405,6 +416,28 @@ export default function BookingDetailPage({ params }: Props) {
                     {isAr ? "صدرت في: " : "Issued: "}
                     {format(new Date(invoice.issuedAt), "MMM d, yyyy")}
                   </p>
+                  {(invoice.pdfUrl || invoice.downloadUrl) && (
+                    <div className="pt-3 flex flex-col gap-2">
+                      {invoice.pdfUrl && (
+                        <a
+                          href={invoice.pdfUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-outline w-full justify-center text-sm"
+                        >
+                          {isAr ? "Ø¹Ø±Ø¶ PDF" : "Open PDF"}
+                        </a>
+                      )}
+                      {invoice.downloadUrl && (
+                        <a
+                          href={invoice.downloadUrl}
+                          className="btn-primary w-full justify-center text-sm"
+                        >
+                          {isAr ? "ØªØ­Ù…ÙŠÙ„ Ø§Ù„ÙØ§ØªÙˆØ±Ø©" : "Download Invoice"}
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : booking.status === "CONFIRMED" ? (
