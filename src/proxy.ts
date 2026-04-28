@@ -19,6 +19,7 @@ const PROTECTED_PATTERNS = [
 ];
 
 const ADMIN_PATTERNS = [/^\/[a-z]{2}\/admin/];
+const ADMIN_API_PATTERNS = [/^\/api\/admin(?:\/|$)/];
 
 const GUEST_ONLY_PATTERNS = [
   /^\/[a-z]{2}\/auth\/login/,
@@ -29,6 +30,28 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const token = req.cookies.get(COOKIE_NAME)?.value;
   const payload = token ? await verifyToken(token) : null;
+
+  if (ADMIN_API_PATTERNS.some((pattern) => pattern.test(pathname))) {
+    if (!payload) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
+
+    if (payload.role !== "ADMIN") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 },
+      );
+    }
+
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
 
   const locale = pathname.split("/")[1] || defaultLocale;
 
@@ -55,7 +78,7 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next|_vercel|.*\\..*).*)"],
+  matcher: ["/((?!_next|_vercel|.*\\..*).*)"],
 };
 
 // // src/middleware.ts

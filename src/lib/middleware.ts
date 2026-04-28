@@ -164,10 +164,13 @@ export function notFound(entity = "Resource"): NextResponse {
   );
 }
 
-export function serverError(error: unknown): NextResponse {
+export function serverError(
+  error: unknown,
+  message = "Internal server error",
+): NextResponse {
   console.error("[API Error]", error);
   return NextResponse.json(
-    { success: false, error: "Internal server error" },
+    { success: false, error: message },
     { status: 500 },
   );
 }

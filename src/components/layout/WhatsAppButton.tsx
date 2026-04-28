@@ -1,8 +1,6 @@
 // src/components/layout/WhatsAppButton.tsx
 "use client";
 
-const number = process.env.ORDER_PHONE;
-
 export default function WhatsAppButton({ number }: { number: string }) {
   if (!number) return null;
 

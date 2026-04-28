@@ -5,6 +5,7 @@ import {
   badRequest,
   serverError,
 } from "@/lib/middleware";
+import { MissingEnvError } from "@/lib/env";
 import { paymentService } from "@/services/payment.service";
 import { CreatePaymentIntentSchema } from "@/validators/payment.validator";
 
@@ -30,6 +31,10 @@ export const POST = withCustomerAuth(async (req, { user }) => {
   } catch (error) {
     if (error instanceof SyntaxError) {
       return badRequest("Invalid request body");
+    }
+
+    if (error instanceof MissingEnvError) {
+      return serverError(error, "Payment configuration is missing");
     }
 
     if (error instanceof Error) {

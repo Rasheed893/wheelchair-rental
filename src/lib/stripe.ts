@@ -1,13 +1,18 @@
-// src/lib/stripe.ts
-
 import Stripe from "stripe";
+import { getRequiredEnv } from "./env";
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error("STRIPE_SECRET_KEY is not set");
+let stripeClient: Stripe | null = null;
+
+export function getStripeClient() {
+  if (!stripeClient) {
+    stripeClient = new Stripe(getRequiredEnv("STRIPE_SECRET_KEY"), {
+      typescript: true,
+    });
+  }
+
+  return stripeClient;
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  typescript: true,
-});
-
-export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
+export function getStripeWebhookSecret() {
+  return getRequiredEnv("STRIPE_WEBHOOK_SECRET");
+}

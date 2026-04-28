@@ -4,10 +4,21 @@ import {
   ok,
   serverError,
 } from "@/lib/middleware";
+import { MissingEnvError } from "@/lib/env";
+import { buildRateLimitKey, rateLimit } from "@/lib/rate-limit";
 import { paymentService } from "@/services/payment.service";
 
 export const POST = withCustomerAuth(async (req, { user }) => {
   try {
+    const limited = rateLimit({
+      key: buildRateLimitKey(req, "payments:confirm", user.id),
+      limit: 10,
+      windowMs: 60_000,
+    });
+    if (limited) {
+      return limited;
+    }
+
     const body = await req.json();
     const paymentIntentId =
       typeof body?.paymentIntentId === "string" ? body.paymentIntentId : "";
@@ -31,6 +42,9 @@ export const POST = withCustomerAuth(async (req, { user }) => {
   } catch (error) {
     if (error instanceof SyntaxError) {
       return badRequest("Invalid request body");
+    }
+    if (error instanceof MissingEnvError) {
+      return serverError(error, "Payment configuration is missing");
     }
     return serverError(error);
   }

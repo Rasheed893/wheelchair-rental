@@ -1,6 +1,7 @@
 import { bookingService } from "@/services/booking.service";
 import { withCustomerAuth, ok, created, badRequest, serverError } from "@/lib/middleware";
 import { createBookingSchema } from "@/validators/booking.validator";
+import { buildRateLimitKey, rateLimit } from "@/lib/rate-limit";
 
 export const GET = withCustomerAuth(async (req, { user }) => {
   try {
@@ -21,6 +22,15 @@ export const GET = withCustomerAuth(async (req, { user }) => {
 
 export const POST = withCustomerAuth(async (req, { user }) => {
   try {
+    const limited = rateLimit({
+      key: buildRateLimitKey(req, "bookings:create", user.id),
+      limit: 5,
+      windowMs: 60_000,
+    });
+    if (limited) {
+      return limited;
+    }
+
     const body = await req.json();
     const parsed = createBookingSchema.safeParse(body);
 

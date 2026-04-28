@@ -17,6 +17,7 @@ import {
   CANCELLABLE_BOOKING_STATUSES,
   canTransitionBookingStatus,
 } from "@/lib/booking-status";
+import { getOptionalEnv } from "@/lib/env";
 
 export class BookingService {
   async create(
@@ -61,9 +62,10 @@ export class BookingService {
     );
 
     if (availability.availableStock < 1) {
+      const supportPhone = getOptionalEnv("SUPPORT_PHONE", "support");
       throw new Error(
         "Selected wheelchair is out of stock for those dates Please contact support for assistance at " +
-          process.env.SUPPORT_PHONE,
+          supportPhone,
       );
     }
 
@@ -129,7 +131,7 @@ export class BookingService {
           paymentStatus: "PENDING",
         });
       } catch (error) {
-        console.error("[EMAIL] Cash booking confirmation failed", {
+        console.error("[EMAIL ERROR]", {
           bookingId: booking.id,
           error,
         });
@@ -151,7 +153,7 @@ export class BookingService {
           paymentStatus: "PENDING",
         });
       } catch (error) {
-        console.error("[EMAIL] Cash admin booking notification failed", {
+        console.error("[EMAIL ERROR]", {
           bookingId: booking.id,
           error,
         });
@@ -239,10 +241,10 @@ export class BookingService {
           to: updated.user.email,
           customerName: updated.user.name,
           bookingId: updated.id,
-          supportPhone: process.env.SUPPORT_PHONE,
+          supportPhone: getOptionalEnv("SUPPORT_PHONE"),
         });
       } catch (error) {
-        console.error("[EMAIL] Booking cancellation email failed", {
+        console.error("[EMAIL ERROR]", {
           bookingId: updated.id,
           error,
         });
@@ -353,7 +355,7 @@ export class BookingService {
           status: nextStatus,
         });
       } catch (error) {
-        console.error("[EMAIL] Booking status update email failed", {
+        console.error("[EMAIL ERROR]", {
           bookingId: updated.id,
           nextStatus,
           error,

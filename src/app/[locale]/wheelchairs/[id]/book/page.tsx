@@ -16,9 +16,11 @@ import "react-day-picker/dist/style.css";
 import { formatAED } from "@/lib/currency";
 import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
 
-const stripePromise = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
-);
+const stripePublishableKey =
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
+const stripePromise = stripePublishableKey
+  ? loadStripe(stripePublishableKey)
+  : null;
 
 interface WheelchairInfo {
   id: string;
@@ -410,6 +412,10 @@ export default function BookPage({
                     >
                       Go to Dashboard
                     </button>
+                  </div>
+                ) : !stripePromise ? (
+                  <div className="space-y-4 py-8 text-center text-red-600">
+                    <p>Stripe is not configured for this environment.</p>
                   </div>
                 ) : clientSecret && bookingIdState ? (
                   <Elements

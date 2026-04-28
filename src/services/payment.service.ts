@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { stripe } from "@/lib/stripe";
+import { getStripeClient } from "@/lib/stripe";
 import type { PaymentIntentResponse } from "@/types";
 import { invoiceService } from "./invoice.service";
 import {
@@ -54,6 +54,7 @@ export class PaymentService {
     bookingId?: string;
     paymentStatus?: "PENDING" | "PAID";
   }> {
+    const stripe = getStripeClient();
     const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     const bookingId = intent.metadata?.bookingId;
@@ -108,6 +109,7 @@ export class PaymentService {
     bookingId: string,
     userId: string,
   ): Promise<PaymentIntentResponse> {
+    const stripe = getStripeClient();
     const booking = await prisma.booking.findFirst({
       where: { id: bookingId, userId },
       include: { wheelchair: true, payment: true },
@@ -212,7 +214,7 @@ export class PaymentService {
     }
   }
 
-  private async onPaymentSucceeded(
+  async onPaymentSucceeded(
     intent: import("stripe").Stripe.PaymentIntent,
   ) {
     const bookingId = intent.metadata.bookingId;
@@ -230,46 +232,52 @@ export class PaymentService {
     });
 
     if (!booking) {
+      console.error("[PAYMENT ERROR]", {
+        bookingId,
+        error: "Booking not found for succeeded payment intent",
+      });
       return;
     }
 
-    if (booking.paymentStatus !== "PAID") {
-      await prisma.$transaction(async (tx) => {
-        await tx.payment.upsert({
-          where: { bookingId },
-          update: {
-            stripePaymentIntentId: intent.id,
-            amount: Number(intent.amount) / 100,
-            currency: intent.currency,
-            status: "SUCCEEDED",
-            paidAt: new Date(),
-            metadata: toInputJson({
-              ...this.getPaymentMetadata(booking.payment?.metadata),
-              ...toJson(intent),
-            }),
-          },
-          create: {
-            bookingId,
-            stripePaymentIntentId: intent.id,
-            amount: Number(intent.amount) / 100,
-            currency: intent.currency,
-            status: "SUCCEEDED",
-            paidAt: new Date(),
-            metadata: toJson(intent),
-          },
-        });
-
-        await tx.booking.update({
-          where: { id: bookingId },
-          data: {
-            status: "CONFIRMED",
-            paymentMethod: "ONLINE",
-            paymentStatus: "PAID",
-            paidAt: new Date(),
-          },
-        });
-      });
+    if (booking.paymentStatus === "PAID") {
+      return;
     }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.payment.upsert({
+        where: { bookingId },
+        update: {
+          stripePaymentIntentId: intent.id,
+          amount: Number(intent.amount) / 100,
+          currency: intent.currency,
+          status: "SUCCEEDED",
+          paidAt: new Date(),
+          metadata: toInputJson({
+            ...this.getPaymentMetadata(booking.payment?.metadata),
+            ...toJson(intent),
+          }),
+        },
+        create: {
+          bookingId,
+          stripePaymentIntentId: intent.id,
+          amount: Number(intent.amount) / 100,
+          currency: intent.currency,
+          status: "SUCCEEDED",
+          paidAt: new Date(),
+          metadata: toJson(intent),
+        },
+      });
+
+      await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: "CONFIRMED",
+          paymentMethod: "ONLINE",
+          paymentStatus: "PAID",
+          paidAt: new Date(),
+        },
+      });
+    });
 
     const invoice = await this.prepareInvoiceNotificationData(
       bookingId,
@@ -298,7 +306,7 @@ export class PaymentService {
         invoiceUrl: invoice.invoiceUrl,
       });
     } catch (error) {
-      console.error("[SUCCESS SYNC] Payment confirmation email failed", {
+      console.error("[EMAIL ERROR]", {
         bookingId,
         error,
       });
@@ -310,6 +318,13 @@ export class PaymentService {
     if (!bookingId) {
       return;
     }
+
+    console.error("[PAYMENT ERROR]", {
+      bookingId,
+      error:
+        intent.last_payment_error?.message ??
+        `PaymentIntent failed with status ${intent.status}`,
+    });
 
     await prisma.payment.upsert({
       where: { bookingId },
@@ -459,7 +474,7 @@ export class PaymentService {
         invoiceUrl: invoice.invoiceUrl,
       });
     } catch (error) {
-      console.error("[CASH PAYMENT] Payment confirmation email failed", {
+      console.error("[EMAIL ERROR]", {
         bookingId,
         error,
       });
@@ -488,6 +503,15 @@ export class PaymentService {
     userId: string,
     fallbackTotalAmount: number,
   ): Promise<InvoiceNotificationData> {
+    const existingInvoice = await invoiceService.getByBooking(bookingId, userId);
+    if (existingInvoice) {
+      return {
+        invoiceNumber: existingInvoice.invoiceNumber,
+        invoiceUrl: existingInvoice.pdfUrl ?? null,
+        totalAmount: Number(existingInvoice.totalAmount),
+      };
+    }
+
     try {
       const invoice = await invoiceService.generate(bookingId, userId);
       const invoiceDetails = await invoiceService.getByBooking(bookingId, userId);
@@ -498,22 +522,22 @@ export class PaymentService {
         totalAmount: Number(invoice.totalAmount),
       };
     } catch (error) {
-      console.error("[SUCCESS SYNC] Invoice generation failed", {
+      console.error("[INVOICE ERROR]", {
         bookingId,
         error,
       });
 
-      const existingInvoice = await invoiceService.getByBooking(bookingId, userId);
-      if (!existingInvoice) {
+      const fallbackInvoice = await invoiceService.getByBooking(bookingId, userId);
+      if (!fallbackInvoice) {
         return {
           totalAmount: fallbackTotalAmount,
         };
       }
 
       return {
-        invoiceNumber: existingInvoice.invoiceNumber,
-        invoiceUrl: existingInvoice.pdfUrl ?? null,
-        totalAmount: Number(existingInvoice.totalAmount),
+        invoiceNumber: fallbackInvoice.invoiceNumber,
+        invoiceUrl: fallbackInvoice.pdfUrl ?? null,
+        totalAmount: Number(fallbackInvoice.totalAmount),
       };
     }
   }
