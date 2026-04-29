@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Prisma
 prisma/migrations/dev.db
+
+# Sentry Config File
+.env.sentry-build-plugin
