@@ -1,5 +1,6 @@
 import type { BookingStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 import type {
   BookingWithRelations,
   PaginatedResponse,
@@ -107,7 +108,7 @@ export class BookingService {
       booking.user.name = input.fullName;
     }
 
-    console.log("[BOOKING] Created booking", {
+    logger.info("[BOOKING] Created booking", {
       bookingId: booking.id,
       paymentMethod: booking.paymentMethod,
       paymentStatus: booking.paymentStatus,
@@ -131,7 +132,7 @@ export class BookingService {
           paymentStatus: "PENDING",
         });
       } catch (error) {
-        console.error("[EMAIL ERROR]", {
+        logger.error("[EMAIL ERROR]", {
           bookingId: booking.id,
           error,
         });
@@ -153,7 +154,7 @@ export class BookingService {
           paymentStatus: "PENDING",
         });
       } catch (error) {
-        console.error("[EMAIL ERROR]", {
+        logger.error("[EMAIL ERROR]", {
           bookingId: booking.id,
           error,
         });
@@ -244,7 +245,7 @@ export class BookingService {
           supportPhone: getOptionalEnv("SUPPORT_PHONE"),
         });
       } catch (error) {
-        console.error("[EMAIL ERROR]", {
+        logger.error("[EMAIL ERROR]", {
           bookingId: updated.id,
           error,
         });
@@ -355,7 +356,7 @@ export class BookingService {
           status: nextStatus,
         });
       } catch (error) {
-        console.error("[EMAIL ERROR]", {
+        logger.error("[EMAIL ERROR]", {
           bookingId: updated.id,
           nextStatus,
           error,

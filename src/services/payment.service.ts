@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getStripeClient } from "@/lib/stripe";
 import type { PaymentIntentResponse } from "@/types";
 import { invoiceService } from "./invoice.service";
+import { logger } from "@/lib/logger";
 import {
   sendAdminPaymentConfirmationEmail,
   sendCustomerPaymentConfirmationEmail,
@@ -195,12 +196,14 @@ export class PaymentService {
           return;
         }
 
-        const intent = event.data.object as import("stripe").Stripe.PaymentIntent;
+        const intent = event.data
+          .object as import("stripe").Stripe.PaymentIntent;
         await this.onPaymentSucceeded(intent);
         break;
       }
       case "payment_intent.payment_failed": {
-        const intent = event.data.object as import("stripe").Stripe.PaymentIntent;
+        const intent = event.data
+          .object as import("stripe").Stripe.PaymentIntent;
         await this.onPaymentFailed(intent);
         break;
       }
@@ -214,9 +217,7 @@ export class PaymentService {
     }
   }
 
-  async onPaymentSucceeded(
-    intent: import("stripe").Stripe.PaymentIntent,
-  ) {
+  async onPaymentSucceeded(intent: import("stripe").Stripe.PaymentIntent) {
     const bookingId = intent.metadata.bookingId;
     if (!bookingId) {
       return;
@@ -232,7 +233,7 @@ export class PaymentService {
     });
 
     if (!booking) {
-      console.error("[PAYMENT ERROR]", {
+      logger.error("[PAYMENT ERROR]", {
         bookingId,
         error: "Booking not found for succeeded payment intent",
       });
@@ -306,7 +307,7 @@ export class PaymentService {
         invoiceUrl: invoice.invoiceUrl,
       });
     } catch (error) {
-      console.error("[EMAIL ERROR]", {
+      logger.error("[EMAIL ERROR]", {
         bookingId,
         error,
       });
@@ -319,7 +320,7 @@ export class PaymentService {
       return;
     }
 
-    console.error("[PAYMENT ERROR]", {
+    logger.error("[PAYMENT ERROR]", {
       bookingId,
       error:
         intent.last_payment_error?.message ??
@@ -474,7 +475,7 @@ export class PaymentService {
         invoiceUrl: invoice.invoiceUrl,
       });
     } catch (error) {
-      console.error("[EMAIL ERROR]", {
+      logger.error("[EMAIL ERROR]", {
         bookingId,
         error,
       });
@@ -503,7 +504,10 @@ export class PaymentService {
     userId: string,
     fallbackTotalAmount: number,
   ): Promise<InvoiceNotificationData> {
-    const existingInvoice = await invoiceService.getByBooking(bookingId, userId);
+    const existingInvoice = await invoiceService.getByBooking(
+      bookingId,
+      userId,
+    );
     if (existingInvoice) {
       return {
         invoiceNumber: existingInvoice.invoiceNumber,
@@ -514,7 +518,10 @@ export class PaymentService {
 
     try {
       const invoice = await invoiceService.generate(bookingId, userId);
-      const invoiceDetails = await invoiceService.getByBooking(bookingId, userId);
+      const invoiceDetails = await invoiceService.getByBooking(
+        bookingId,
+        userId,
+      );
 
       return {
         invoiceNumber: invoice.invoiceNumber,
@@ -522,12 +529,15 @@ export class PaymentService {
         totalAmount: Number(invoice.totalAmount),
       };
     } catch (error) {
-      console.error("[INVOICE ERROR]", {
+      logger.error("[INVOICE ERROR]", {
         bookingId,
         error,
       });
 
-      const fallbackInvoice = await invoiceService.getByBooking(bookingId, userId);
+      const fallbackInvoice = await invoiceService.getByBooking(
+        bookingId,
+        userId,
+      );
       if (!fallbackInvoice) {
         return {
           totalAmount: fallbackTotalAmount,
