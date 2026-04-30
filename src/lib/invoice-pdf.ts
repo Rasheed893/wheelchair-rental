@@ -54,11 +54,13 @@ function formatMoney(value: number, currency: string) {
 }
 
 function companyName() {
-  return process.env.COMPANY_NAME?.trim() || "WheelRent";
+  return process.env.NEXT_PUBLIC_COMPANY_NAME?.trim() || "WheelRent";
 }
 
 function companyVatNumber() {
-  return process.env.COMPANY_VAT_NUMBER?.trim() || "VAT not configured";
+  return (
+    process.env.NEXT_PUBLIC_COMPANY_VAT_NUMBER?.trim() || "VAT not configured"
+  );
 }
 
 async function loadInvoiceFontBytes() {
@@ -75,7 +77,9 @@ async function loadInvoiceFontBytes() {
   return invoiceFontBytesPromise;
 }
 
-export async function buildInvoicePdf(data: InvoicePdfData): Promise<Uint8Array> {
+export async function buildInvoicePdf(
+  data: InvoicePdfData,
+): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);

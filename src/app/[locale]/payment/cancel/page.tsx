@@ -12,7 +12,7 @@ export default function PaymentCancelPage({
   const { locale } = use(params);
   const resolvedSearchParams = use(searchParams);
   const isAr = locale === "ar";
-  const supportPhone = process.env.SUPPORT_PHONE;
+  const supportPhone = process.env.NEXT_PUBLIC_SUPPORT_PHONE;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4">
@@ -48,7 +48,10 @@ export default function PaymentCancelPage({
         {supportPhone && (
           <p className="mt-5 text-sm text-slate-500">
             {isAr ? "للمساعدة اتصل على " : "Need help? Call "}
-            <a href={`tel:${supportPhone}`} className="font-semibold text-primary-700 underline">
+            <a
+              href={`tel:${supportPhone}`}
+              className="font-semibold text-primary-700 underline"
+            >
               {supportPhone}
             </a>
           </p>

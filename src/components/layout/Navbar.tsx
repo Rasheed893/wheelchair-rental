@@ -58,7 +58,7 @@ export default function Navbar({ locale }: NavbarProps) {
             style={{ fontFamily: "var(--font-sora)" }}
           >
             <span className="text-2xl">♿</span>
-            <span>WheelRent</span>
+            <span>{process.env.NEXT_PUBLIC_COMPANY_NAME}</span>
           </Link>
 
           {/* Desktop Nav */}

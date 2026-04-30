@@ -13,7 +13,9 @@ export const SITE_NAME = "WheelRent";
 export const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ?? "https://wheelchair-rental.vercel.app";
 export const SUPPORT_PHONE =
-  process.env.SUPPORT_PHONE ?? process.env.ORDER_PHONE ?? "";
+  process.env.NEXT_PUBLIC_SUPPORT_PHONE ??
+  process.env.NEXT_PUBLIC_ORDER_PHONE ??
+  "";
 
 export const DEFAULT_OG_IMAGE = `${BASE_URL}/og-default.jpg`; // place a 1200×630 image here
 export const LOCALES = ["en", "ar"] as const;
