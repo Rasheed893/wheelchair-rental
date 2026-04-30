@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import Footer from "@/components/layout/Footer";
 import Navbar from "@/components/layout/Navbar";
 import WhatsAppButton from "@/components/layout/WhatsAppButton";
+import { AuthProvider } from "@/context/AuthContext";
 import { getOptionalEnv } from "@/lib/env";
 import { locales } from "@/lib/i18n";
 import { buildBaseMetadata, SITE_NAME } from "@/lib/seo";
@@ -38,15 +39,17 @@ export default async function LocaleLayout({ children, params }: Props) {
 
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
-      <div
-        className={`flex min-h-screen flex-col ${isRTL ? "font-arabic" : ""}`}
-        dir={isRTL ? "rtl" : "ltr"}
-      >
-        <Navbar locale={locale} />
-        <main className="flex-1">{children}</main>
-        <Footer locale={locale} />
-        <WhatsAppButton number={getOptionalEnv("ORDER_PHONE")} />
-      </div>
+      <AuthProvider>
+        <div
+          className={`flex min-h-screen flex-col ${isRTL ? "font-arabic" : ""}`}
+          dir={isRTL ? "rtl" : "ltr"}
+        >
+          <Navbar locale={locale} />
+          <main className="flex-1">{children}</main>
+          <Footer locale={locale} />
+          <WhatsAppButton number={getOptionalEnv("ORDER_PHONE")} />
+        </div>
+      </AuthProvider>
     </NextIntlClientProvider>
   );
 }

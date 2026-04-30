@@ -84,11 +84,9 @@ export default function Navbar({ locale }: NavbarProps) {
               <div className="relative group">
                 <button className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-primary-600 transition-colors">
                   <span className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-semibold text-xs">
-                    {user.name.charAt(0).toUpperCase()}
+                    {user.name?.charAt(0).toUpperCase() ?? "?"}
                   </span>
-                  <span className="hidden lg:block">
-                    {user.name.split(" ")[0]}
-                  </span>
+                  <span>{user.name?.split(" ")[0] ?? "User"}</span>
                 </button>
                 {/* Dropdown */}
                 <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">

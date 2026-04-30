@@ -1,8 +1,11 @@
 // src/components/layout/Footer.tsx
+"use client";
+
 import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Footer({ locale }: { locale: string }) {
+  const { user, loading } = useAuth();
   return (
     <footer className="bg-slate-900 text-slate-400 mt-20">
       <div className="page-container py-12">
@@ -35,22 +38,35 @@ export default function Footer({ locale }: { locale: string }) {
                   {locale === "ar" ? "تصفح الكراسي" : "Browse Wheelchairs"}
                 </Link>
               </li>
-              <li>
-                <Link
-                  href={`/${locale}/auth/login`}
-                  className="hover:text-white transition-colors"
-                >
-                  {locale === "ar" ? "تسجيل الدخول" : "Login"}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href={`/${locale}/auth/register`}
-                  className="hover:text-white transition-colors"
-                >
-                  {locale === "ar" ? "إنشاء حساب" : "Register"}
-                </Link>
-              </li>
+              {loading ? null : user ? (
+                <li>
+                  <Link
+                    href={`/${locale}/dashboard`}
+                    className="hover:text-white transition-colors"
+                  >
+                    {locale === "ar" ? "طلباتي" : "My Orders"}
+                  </Link>
+                </li>
+              ) : (
+                <>
+                  <li>
+                    <Link
+                      href={`/${locale}/auth/login`}
+                      className="hover:text-white transition-colors"
+                    >
+                      {locale === "ar" ? "تسجيل الدخول" : "Login"}
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href={`/${locale}/auth/register`}
+                      className="hover:text-white transition-colors"
+                    >
+                      {locale === "ar" ? "إنشاء حساب" : "Register"}
+                    </Link>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
 
@@ -59,8 +75,8 @@ export default function Footer({ locale }: { locale: string }) {
               {locale === "ar" ? "تواصل معنا" : "Contact"}
             </h4>
             <ul className="space-y-2 text-sm">
-              <li>support@wheelrent.com</li>
-              <li>+1 (800) WHEEL-RENT</li>
+              <li>{process.env.NEXT_PUBLIC_SUPPORT_EMAIL}</li>
+              <li>{process.env.NEXT_PUBLIC_SUPPORT_PHONE}</li>
             </ul>
           </div>
         </div>

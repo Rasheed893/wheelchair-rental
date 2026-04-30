@@ -63,7 +63,10 @@ export class BookingService {
     );
 
     if (availability.availableStock < 1) {
-      const supportPhone = getOptionalEnv("SUPPORT_PHONE", "support");
+      const supportPhone = getOptionalEnv(
+        "NEXT_PUBLIC_SUPPORT_PHONE",
+        "support",
+      );
       throw new Error(
         "Selected wheelchair is out of stock for those dates Please contact support for assistance at " +
           supportPhone,
@@ -242,7 +245,7 @@ export class BookingService {
           to: updated.user.email,
           customerName: updated.user.name,
           bookingId: updated.id,
-          supportPhone: getOptionalEnv("SUPPORT_PHONE"),
+          supportPhone: getOptionalEnv("NEXT_PUBLIC_SUPPORT_PHONE"),
         });
       } catch (error) {
         logger.error("[EMAIL ERROR]", {
