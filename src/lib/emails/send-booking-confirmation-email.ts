@@ -122,7 +122,9 @@ export async function sendBookingConfirmationEmail(input: BookingEmailInput) {
   });
 }
 
-export async function sendAdminBookingNotificationEmail(input: BookingEmailInput) {
+export async function sendAdminBookingNotificationEmail(
+  input: BookingEmailInput,
+) {
   const { to, ...rest } = input;
   const adminEmail = process.env.ADMIN_EMAIL?.trim();
 
@@ -133,9 +135,12 @@ export async function sendAdminBookingNotificationEmail(input: BookingEmailInput
   });
 
   if (!adminEmail) {
-    console.warn("[EMAIL] Skipping admin booking email because ADMIN_EMAIL is empty", {
-      bookingId: rest.bookingId,
-    });
+    console.warn(
+      "[EMAIL] Skipping admin booking email because ADMIN_EMAIL is empty",
+      {
+        bookingId: rest.bookingId,
+      },
+    );
     return { skipped: true as const, reason: "ADMIN_EMAIL is empty" };
   }
 

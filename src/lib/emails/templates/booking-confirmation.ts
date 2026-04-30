@@ -13,6 +13,7 @@ export function bookingConfirmationTemplate({
   bookingId,
   paymentMethod,
   paymentStatusLabel,
+  companyName = process.env.NEXT_PUBLIC_COMPANY_NAME || "Your Company",
 }: {
   customerName: string;
   phoneNumber: string;
@@ -28,6 +29,7 @@ export function bookingConfirmationTemplate({
   bookingId: string;
   paymentMethod: "ONLINE" | "CASH";
   paymentStatusLabel: string;
+  companyName?: string;
 }) {
   return `
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
@@ -54,7 +56,7 @@ export function bookingConfirmationTemplate({
         <li><strong>Payment status:</strong> ${paymentStatusLabel}</li>
       </ul>
 
-      <p>Thank you for booking with WheelRent.</p>
+      <p>Thank you for booking with ${companyName}.</p>
     </div>
   `;
 }
