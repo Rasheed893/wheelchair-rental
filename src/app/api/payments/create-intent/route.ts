@@ -8,6 +8,7 @@ import {
 import { MissingEnvError } from "@/lib/env";
 import { paymentService } from "@/services/payment.service";
 import { CreatePaymentIntentSchema } from "@/validators/payment.validator";
+import { logger } from "@/lib/logger";
 
 export const POST = withCustomerAuth(async (req, { user }) => {
   try {

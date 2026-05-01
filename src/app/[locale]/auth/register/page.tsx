@@ -34,14 +34,13 @@ export default function RegisterPage({
 
   async function onSubmit(data: RegisterInput) {
     setServerError(null);
-    console.log("[REGISTER SUBMIT]", data); // TODO: Remove in production
+
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    console.log("[REGISTER RESPONSE STATUS]", res.status); // todo: Remove in production
-    // console.log("[REGISTER RESPONSE BODY]", await res.text()); // todo: Remove in production
+
     const json = await res.json();
 
     if (!json.success) {

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { bookingService } from "@/services/booking.service";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -19,14 +20,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const count = await bookingService.expirePendingBookings();
-    console.log(`[Cron] Expired ${count} pending bookings`);
+    logger.info(`[Cron] Expired ${count} pending bookings`);
     return NextResponse.json({
       success: true,
       expiredCount: count,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    console.error("[Cron] Failed to expire bookings:", err);
+    logger.error("[Cron] Failed to expire bookings:", { error: err });
     return NextResponse.json(
       { success: false, error: "Internal error" },
       { status: 500 },

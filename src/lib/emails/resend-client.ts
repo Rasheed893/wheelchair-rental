@@ -44,12 +44,12 @@ export async function sendEmail({
   const from = process.env.EMAIL_FROM;
   const adminEmail = process.env.ADMIN_EMAIL;
 
-  console.log("[EMAIL] Runtime config", {
-    hasResendApiKey: Boolean(apiKey),
-    resendApiKey: maskSecret(apiKey),
-    emailFrom: maskEmail(from),
-    adminEmail: maskEmail(adminEmail),
-  });
+  // console.log("[EMAIL] Runtime config", {
+  //   hasResendApiKey: Boolean(apiKey),
+  //   resendApiKey: maskSecret(apiKey),
+  //   emailFrom: maskEmail(from),
+  //   adminEmail: maskEmail(adminEmail),
+  // });
 
   if (!apiKey || !from) {
     console.error("[EMAIL] Missing email provider configuration", {
@@ -59,11 +59,11 @@ export async function sendEmail({
     throw new Error("Missing RESEND_API_KEY or EMAIL_FROM");
   }
 
-  console.log("[EMAIL] Sending via Resend...", {
-    to,
-    subject,
-    from: maskEmail(from),
-  });
+  // console.log("[EMAIL] Sending via Resend...", {
+  //   to,
+  //   subject,
+  //   from: maskEmail(from),
+  // });
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -82,10 +82,10 @@ export async function sendEmail({
 
   const data = await response.text();
 
-  console.log("[EMAIL] Resend response", {
-    status: response.status,
-    body: data,
-  });
+  // console.log("[EMAIL] Resend response", {
+  //   status: response.status,
+  //   body: data,
+  // });
 
   if (!response.ok) {
     console.error("[EMAIL ERROR] Resend request failed", {
@@ -94,11 +94,13 @@ export async function sendEmail({
       status: response.status,
       body: data,
     });
-    throw new Error(`Resend email failed with status ${response.status}: ${data}`);
+    throw new Error(
+      `Resend email failed with status ${response.status}: ${data}`,
+    );
   }
 
-  console.log("[EMAIL] Email sent successfully", {
-    to: to.map((recipient) => maskEmail(recipient)),
-    subject,
-  });
+  // console.log("[EMAIL] Email sent successfully", {
+  //   to: to.map((recipient) => maskEmail(recipient)),
+  //   subject,
+  // });
 }

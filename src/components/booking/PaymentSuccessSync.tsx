@@ -1,5 +1,6 @@
 "use client";
 
+import { logger } from "@/lib/logger";
 import { useEffect, useRef } from "react";
 
 interface PaymentSuccessSyncProps {
@@ -24,7 +25,7 @@ export function PaymentSuccessSync({
 
     void (async () => {
       try {
-        console.log("[SUCCESS SYNC] Calling /api/payments/confirm", {
+        logger.info("[SUCCESS SYNC] Calling /api/payments/confirm", {
           paymentIntentId,
           bookingId,
         });
@@ -41,15 +42,15 @@ export function PaymentSuccessSync({
           data?.success !== true ||
           data?.data?.paymentStatus !== "PAID"
         ) {
-          console.error("[SUCCESS SYNC] Payment sync failed", data);
+          logger.error("[SUCCESS SYNC] Payment sync failed", { data });
           onSyncFailed?.();
           return;
         }
 
-        console.log("[SUCCESS SYNC] Payment sync completed", data);
+        logger.info("[SUCCESS SYNC] Payment sync completed", { data });
         onSyncComplete?.(data.data.paymentStatus);
       } catch (error) {
-        console.error("[SUCCESS SYNC] Request failed", error);
+        logger.error("[SUCCESS SYNC] Request failed", { error });
         onSyncFailed?.();
       }
     })();
