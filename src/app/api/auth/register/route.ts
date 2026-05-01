@@ -1,4 +1,4 @@
-console.log("[REGISTER API HIT]");
+// console.log("[REGISTER API HIT]");
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookie } from "@/lib/auth";
 import { authService } from "@/services/auth.service";

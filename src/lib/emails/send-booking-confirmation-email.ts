@@ -1,3 +1,4 @@
+import { logger } from "@sentry/nextjs";
 import { sendEmail } from "./resend-client";
 import { bookingConfirmationTemplate } from "./templates/booking-confirmation";
 import { paymentReceivedTemplate } from "./templates/payment-received";
@@ -103,12 +104,12 @@ export async function sendBookingConfirmationEmail(input: BookingEmailInput) {
   const { to, ...rest } = input;
   const payload = buildBookingEmailPayload(rest);
 
-  console.log("[EMAIL] Sending booking confirmation to customer...", {
-    bookingId: rest.bookingId,
-    to: maskEmail(to),
-    paymentMethod: rest.paymentMethod,
-    paymentStatus: rest.paymentStatus,
-  });
+  // console.log("[EMAIL] Sending booking confirmation to customer...", {
+  //   bookingId: rest.bookingId,
+  //   to: maskEmail(to),
+  //   paymentMethod: rest.paymentMethod,
+  //   paymentStatus: rest.paymentStatus,
+  // });
 
   await sendEmail({
     to: [to],
@@ -116,10 +117,10 @@ export async function sendBookingConfirmationEmail(input: BookingEmailInput) {
     html: payload.html,
   });
 
-  console.log("[EMAIL] Customer booking confirmation sent", {
-    bookingId: rest.bookingId,
-    to: maskEmail(to),
-  });
+  // console.log("[EMAIL] Customer booking confirmation sent", {
+  //   bookingId: rest.bookingId,
+  //   to: maskEmail(to),
+  // });
 }
 
 export async function sendAdminBookingNotificationEmail(
@@ -128,11 +129,11 @@ export async function sendAdminBookingNotificationEmail(
   const { to, ...rest } = input;
   const adminEmail = process.env.ADMIN_EMAIL?.trim();
 
-  console.log("[EMAIL] ADMIN_EMAIL resolved", {
-    bookingId: rest.bookingId,
-    hasAdminEmail: Boolean(adminEmail),
-    adminEmail: maskEmail(adminEmail),
-  });
+  // console.log("[EMAIL] ADMIN_EMAIL resolved", {
+  //   bookingId: rest.bookingId,
+  //   hasAdminEmail: Boolean(adminEmail),
+  //   adminEmail: maskEmail(adminEmail),
+  // });
 
   if (!adminEmail) {
     console.warn(
@@ -144,11 +145,11 @@ export async function sendAdminBookingNotificationEmail(
     return { skipped: true as const, reason: "ADMIN_EMAIL is empty" };
   }
 
-  console.log("[EMAIL] Sending to admin...", {
-    bookingId: rest.bookingId,
-    adminEmail: maskEmail(adminEmail),
-    customerEmail: maskEmail(to),
-  });
+  // console.log("[EMAIL] Sending to admin...", {
+  //   bookingId: rest.bookingId,
+  //   adminEmail: maskEmail(adminEmail),
+  //   customerEmail: maskEmail(to),
+  // });
 
   const payload = buildBookingEmailPayload(rest);
   await sendEmail({
@@ -157,10 +158,10 @@ export async function sendAdminBookingNotificationEmail(
     html: payload.html,
   });
 
-  console.log("[EMAIL] Admin booking email sent", {
-    bookingId: rest.bookingId,
-    adminEmail: maskEmail(adminEmail),
-  });
+  // console.log("[EMAIL] Admin booking email sent", {
+  //   bookingId: rest.bookingId,
+  //   adminEmail: maskEmail(adminEmail),
+  // });
 
   return { skipped: false as const };
 }
@@ -174,12 +175,12 @@ export async function sendCashPaymentReceivedEmail({
   customerName: string;
   bookingId: string;
 }) {
-  console.log("[EMAIL] sending to:", to);
-  console.log("[EMAIL] Sending payment confirmation...", {
-    bookingId,
-    to,
-    customerName,
-  });
+  // console.log("[EMAIL] sending to:", to);
+  // console.log("[EMAIL] Sending payment confirmation...", {
+  //   bookingId,
+  //   to,
+  //   customerName,
+  // });
 
   try {
     await sendEmail({
@@ -188,12 +189,12 @@ export async function sendCashPaymentReceivedEmail({
       html: paymentReceivedTemplate({ customerName, bookingId }),
     });
 
-    console.log("[EMAIL] success", {
+    logger.info("[EMAIL] success", {
       bookingId,
       to,
     });
   } catch (error) {
-    console.error("[EMAIL ERROR]", {
+    logger.error("[EMAIL ERROR]", {
       bookingId,
       to,
       error,
@@ -238,7 +239,7 @@ export async function sendCustomerPaymentConfirmationEmail(
             ? `<p><a href="${input.invoiceUrl}" style="display:inline-block;background:#0f766e;color:#ffffff;padding:10px 16px;border-radius:8px;text-decoration:none">Download your invoice PDF</a></p>`
             : "<p>Your invoice is being prepared and will be available shortly.</p>"
         }
-        <p>Thank you for choosing WheelRent.</p>
+        <p>Thank you for choosing ${process.env.NEXT_PUBLIC_COMPANY_NAME || "BioMobility"}.</p>
       </div>
     `,
   });
@@ -299,7 +300,7 @@ export async function sendBookingCancelledEmail({
   bookingId: string;
   supportPhone?: string;
 }) {
-  console.log("[EMAIL] Sending cancellation email...", {
+  logger.info("[EMAIL] Sending cancellation email...", {
     bookingId,
     to: maskEmail(to),
     supportPhone: supportPhone ?? "<missing>",
@@ -318,10 +319,10 @@ export async function sendBookingCancelledEmail({
     `,
   });
 
-  console.log("[EMAIL] Cancellation email sent", {
-    bookingId,
-    to: maskEmail(to),
-  });
+  // console.log("[EMAIL] Cancellation email sent", {
+  //   bookingId,
+  //   to: maskEmail(to),
+  // });
 }
 
 export async function sendBookingStatusUpdateEmail({
@@ -338,11 +339,11 @@ export async function sendBookingStatusUpdateEmail({
   const readableStatus =
     status === "OUT_FOR_DELIVERY" ? "out for delivery" : "delivered";
 
-  console.log("[EMAIL] Sending booking status update...", {
-    bookingId,
-    status,
-    to: maskEmail(to),
-  });
+  // console.log("[EMAIL] Sending booking status update...", {
+  //   bookingId,
+  //   status,
+  //   to: maskEmail(to),
+  // });
 
   await sendEmail({
     to: [to],
@@ -356,9 +357,9 @@ export async function sendBookingStatusUpdateEmail({
     `,
   });
 
-  console.log("[EMAIL] Booking status update sent", {
-    bookingId,
-    status,
-    to: maskEmail(to),
-  });
+  // console.log("[EMAIL] Booking status update sent", {
+  //   bookingId,
+  //   status,
+  //   to: maskEmail(to),
+  // });
 }

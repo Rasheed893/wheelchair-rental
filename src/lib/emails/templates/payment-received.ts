@@ -10,7 +10,7 @@ export function paymentReceivedTemplate({
       <h2>Payment received ✅</h2>
       <p>Hello ${customerName},</p>
       <p>Your booking (ID: ${bookingId}) has been successfully paid.</p>
-      <p>Thank you for choosing WheelRent.</p>
+      <p>Thank you for choosing ${process.env.NEXT_PUBLIC_COMPANY_NAME || "BioMobility"}.</p>
     </div>
   `;
 }

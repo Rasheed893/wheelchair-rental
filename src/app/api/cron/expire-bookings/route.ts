@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const count = await bookingService.expireStaleBookings();
-    console.log(`[Cron] Expired ${count} stale bookings`);
+    const count = await bookingService.expirePendingBookings();
+    console.log(`[Cron] Expired ${count} pending bookings`);
     return NextResponse.json({
       success: true,
       expiredCount: count,

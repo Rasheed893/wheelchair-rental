@@ -19,8 +19,28 @@ import {
   canTransitionBookingStatus,
 } from "@/lib/booking-status";
 import { getOptionalEnv } from "@/lib/env";
+import {
+  getExpiredReservationWhere,
+  getReservationExpiryDate,
+  getReservationBlockingWhere,
+} from "@/lib/booking-reservation";
 
 export class BookingService {
+  async expirePendingBookings(): Promise<number> {
+    const now = new Date();
+    const result = await prisma.booking.updateMany({
+      where: getExpiredReservationWhere(now),
+      data: {
+        paymentStatus: "EXPIRED",
+        status: "CANCELLED",
+        cancelledAt: now,
+        cancelReason: "Reservation expired before payment completion",
+      },
+    });
+
+    return result.count;
+  }
+
   async create(
     userId: string,
     input: CreateBookingInput,
@@ -93,6 +113,10 @@ export class BookingService {
         deliveryNotes: input.deliveryNotes,
         paymentMethod: input.paymentMethod,
         paymentStatus: "PENDING",
+        reservationExpiresAt:
+          input.paymentMethod === "ONLINE"
+            ? getReservationExpiryDate()
+            : null,
         paidAt: null,
       },
       include: {
@@ -171,6 +195,8 @@ export class BookingService {
     userId: string,
     pagination: PaginationParams = {},
   ): Promise<PaginatedResponse<BookingWithRelations>> {
+    await this.expirePendingBookings();
+
     const { page = 1, pageSize = 10 } = pagination;
     const skip = (page - 1) * pageSize;
 
@@ -198,6 +224,8 @@ export class BookingService {
     bookingId: string,
     userId?: string,
   ): Promise<BookingWithRelations | null> {
+    await this.expirePendingBookings();
+
     const where = userId ? { id: bookingId, userId } : { id: bookingId };
 
     return prisma.booking.findFirst({
@@ -261,11 +289,13 @@ export class BookingService {
   async adminList(
     filters: {
       status?: BookingStatus;
-      paymentStatus?: "PENDING" | "PAID";
+      paymentStatus?: "PENDING" | "PAID" | "EXPIRED";
       query?: string;
     } = {},
     pagination: PaginationParams = {},
   ): Promise<PaginatedResponse<BookingWithRelations>> {
+    await this.expirePendingBookings();
+
     const { page = 1, pageSize = 20 } = pagination;
     const skip = (page - 1) * pageSize;
     const where = {
@@ -316,6 +346,8 @@ export class BookingService {
   }
 
   async adminUpdateStatus(bookingId: string, nextStatus: BookingStatus) {
+    await this.expirePendingBookings();
+
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
@@ -334,6 +366,14 @@ export class BookingService {
       throw new Error(
         `Cannot update booking from ${booking.status} to ${nextStatus}`,
       );
+    }
+
+    if (
+      nextStatus === "CONFIRMED" &&
+      booking.paymentMethod === "ONLINE" &&
+      booking.paymentStatus !== "PAID"
+    ) {
+      throw new Error("Cannot confirm unpaid online booking");
     }
 
     const updated = await prisma.booking.update({
@@ -370,17 +410,8 @@ export class BookingService {
     return updated as unknown as BookingWithRelations;
   }
 
-  async expireStaleBookings(): Promise<number> {
-    const cutoff = new Date(Date.now() - 30 * 60 * 1000);
-    const result = await prisma.booking.updateMany({
-      where: {
-        status: "PENDING",
-        createdAt: { lt: cutoff },
-        payment: null,
-      },
-      data: { status: "EXPIRED" },
-    });
-    return result.count;
+  getBlockingReservationWhere(now = new Date()) {
+    return getReservationBlockingWhere(now);
   }
 }
 

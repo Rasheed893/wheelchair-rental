@@ -93,7 +93,8 @@ type BookingPaymentFields = {
   deliveryAddress: string;
   deliveryNotes?: string | null;
   paymentMethod: "ONLINE" | "CASH";
-  paymentStatus: "PENDING" | "PAID";
+  paymentStatus: "PENDING" | "PAID" | "EXPIRED";
+  reservationExpiresAt?: Date | null;
   paidAt?: Date | null;
 };
 

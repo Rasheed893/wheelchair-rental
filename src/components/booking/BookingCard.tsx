@@ -31,6 +31,11 @@ const STATUS_LABEL: Record<string, { en: string; ar: string }> = {
 export default function BookingCard({ booking, locale, onCancel }: Props) {
   const isAr = locale === "ar";
   const name = isAr ? booking.wheelchair.nameAr : booking.wheelchair.name;
+  const reservationExpired =
+    booking.paymentMethod === "ONLINE" &&
+    booking.paymentStatus === "PENDING" &&
+    !!booking.reservationExpiresAt &&
+    new Date(booking.reservationExpiresAt) <= new Date();
   const statusLabel =
     STATUS_LABEL[booking.status]?.[isAr ? "ar" : "en"] ?? booking.status;
   const canCancel = ["PENDING", "CONFIRMED"].includes(booking.status);
@@ -39,7 +44,9 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
       ? isAr
         ? "🟢 مدفوع"
         : "🟢 Paid"
-      : booking.paymentMethod === "CASH"
+        : booking.paymentStatus === "EXPIRED" || reservationExpired
+          ? (isAr ? "منتهي" : "Expired")
+        : booking.paymentMethod === "CASH"
         ? isAr
           ? "🟡 معلق (الدفع عند الاستلام)"
           : "🟡 Pending (Cash on Delivery)"
@@ -103,7 +110,10 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
           {isAr ? "التفاصيل" : "View Details"}
         </Link>
 
-        {booking.status === "PENDING" && booking.paymentMethod === "ONLINE" && (
+        {booking.status === "PENDING" &&
+        booking.paymentMethod === "ONLINE" &&
+        booking.paymentStatus === "PENDING" &&
+        !reservationExpired && (
           <Link
             href={`/${locale}/wheelchairs/${booking.wheelchairId}/book?bookingId=${booking.id}`}
             className="btn-primary py-1.5 px-3 text-xs"

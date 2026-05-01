@@ -10,7 +10,7 @@ export async function sendWelcomeEmail({
 }) {
   await sendEmail({
     to: [to],
-    subject: "Welcome to WheelRent 🎉",
+    subject: `Welcome to ${process.env.NEXT_PUBLIC_COMPANY_NAME || "BioMobility"} 🎉`,
     html: welcomeTemplate(name),
   });
 }

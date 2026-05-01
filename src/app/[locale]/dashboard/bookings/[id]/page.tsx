@@ -35,6 +35,7 @@ const STATUS_BADGE: Record<string, string> = {
 const PAY_STATUS: Record<string, string> = {
   PENDING: "badge-yellow",
   PAID: "badge-green",
+  EXPIRED: "badge-gray",
 };
 
 export default function BookingDetailPage({ params }: Props) {
@@ -115,7 +116,20 @@ export default function BookingDetailPage({ params }: Props) {
 
   const name = isAr ? booking.wheelchair.nameAr : booking.wheelchair.name;
   const canCancel = ["PENDING", "CONFIRMED"].includes(booking.status);
-  const isPending = booking.status === "PENDING" && booking.paymentMethod === "ONLINE";
+  const reservationExpired =
+    booking.paymentMethod === "ONLINE" &&
+    booking.paymentStatus === "PENDING" &&
+    !!booking.reservationExpiresAt &&
+    new Date(booking.reservationExpiresAt) <= new Date();
+  const isExpired =
+    booking.paymentStatus === "EXPIRED" ||
+    booking.status === "EXPIRED" ||
+    reservationExpired;
+  const isPending =
+    booking.status === "PENDING" &&
+    booking.paymentMethod === "ONLINE" &&
+    booking.paymentStatus === "PENDING" &&
+    !isExpired;
   const subtotal = Number(invoice?.subtotal ?? booking.totalPrice);
   const taxAmount = Number(invoice?.taxAmount ?? calculateTax(subtotal, VAT_RATE));
   const totalAmount = Number(
@@ -160,6 +174,27 @@ export default function BookingDetailPage({ params }: Props) {
               className="btn-primary py-2 px-4 text-sm shrink-0"
             >
               {isAr ? "أكمل الدفع" : "Pay Now"}
+            </Link>
+          </div>
+        )}
+
+        {isExpired && (
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 flex items-center justify-between gap-4">
+            <div>
+              <p className="font-semibold text-slate-900 text-sm">
+                {isAr ? "انتهى الحجز" : "Booking expired"}
+              </p>
+              <p className="text-slate-600 text-xs">
+                {isAr
+                  ? "لم يكتمل الدفع خلال مدة الحجز."
+                  : "The reservation window ended before payment was completed."}
+              </p>
+            </div>
+            <Link
+              href={`/${locale}/wheelchairs/${booking.wheelchairId}/book`}
+              className="btn-outline py-2 px-4 text-sm shrink-0"
+            >
+              {isAr ? "إعادة الحجز" : "Rebook"}
             </Link>
           </div>
         )}
@@ -309,6 +344,8 @@ export default function BookingDetailPage({ params }: Props) {
                       ? isAr
                         ? "🟢 مدفوع"
                         : "🟢 Paid"
+                      : booking.paymentStatus === "EXPIRED" || isExpired
+                        ? (isAr ? "منتهي" : "Expired")
                       : booking.paymentMethod === "CASH"
                         ? isAr
                           ? "🟡 معلق (الدفع عند الاستلام)"
@@ -407,6 +444,8 @@ export default function BookingDetailPage({ params }: Props) {
                     <span>
                       {booking.paymentStatus === "PAID"
                         ? "Paid"
+                        : booking.paymentStatus === "EXPIRED" || isExpired
+                          ? (isAr ? "منتهي" : "Expired")
                         : booking.paymentMethod === "CASH"
                           ? "Unpaid (Cash on Delivery)"
                           : "Pending"}

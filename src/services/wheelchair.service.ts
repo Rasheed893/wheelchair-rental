@@ -13,6 +13,7 @@ import type {
   WheelchairStatus,
 } from "@prisma/client";
 import { ACTIVE_BOOKING_STATUSES } from "@/lib/booking-status";
+import { getReservationBlockingWhere } from "@/lib/booking-reservation";
 
 export interface WheelchairFilters {
   category?: WheelchairCategory;
@@ -113,6 +114,7 @@ export class WheelchairService {
       where: {
         wheelchairId,
         status: { in: ACTIVE_BOOKING_STATUSES },
+        ...getReservationBlockingWhere(),
         endDate: { gte: new Date() },
       },
       select: { startDate: true, endDate: true },
@@ -150,6 +152,7 @@ export class WheelchairService {
       where: {
         wheelchairId,
         status: { in: ACTIVE_BOOKING_STATUSES },
+        ...getReservationBlockingWhere(),
         id: excludeBookingId ? { not: excludeBookingId } : undefined,
         AND: [{ startDate: { lte: endDate } }, { endDate: { gte: startDate } }],
       },
@@ -181,6 +184,7 @@ export class WheelchairService {
       where: {
         wheelchairId,
         status: { in: ACTIVE_BOOKING_STATUSES },
+        ...getReservationBlockingWhere(),
         id: excludeBookingId ? { not: excludeBookingId } : undefined,
         AND: [{ startDate: { lte: endDate } }, { endDate: { gte: startDate } }],
       },

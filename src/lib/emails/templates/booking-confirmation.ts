@@ -13,7 +13,7 @@ export function bookingConfirmationTemplate({
   bookingId,
   paymentMethod,
   paymentStatusLabel,
-  companyName = process.env.NEXT_PUBLIC_COMPANY_NAME || "Your Company",
+  companyName = process.env.NEXT_PUBLIC_COMPANY_NAME || "BioMobility",
 }: {
   customerName: string;
   phoneNumber: string;

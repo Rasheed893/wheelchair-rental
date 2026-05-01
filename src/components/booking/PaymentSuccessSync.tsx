@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 interface PaymentSuccessSyncProps {
   paymentIntentId?: string;
   bookingId?: string;
-  onSyncComplete?: () => void;
+  onSyncComplete?: (paymentStatus: "PENDING" | "PAID" | "EXPIRED") => void;
   onSyncFailed?: () => void;
 }
 
@@ -47,7 +47,7 @@ export function PaymentSuccessSync({
         }
 
         console.log("[SUCCESS SYNC] Payment sync completed", data);
-        onSyncComplete?.();
+        onSyncComplete?.(data.data.paymentStatus);
       } catch (error) {
         console.error("[SUCCESS SYNC] Request failed", error);
         onSyncFailed?.();

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { AuthUser, Role } from "@/types";
 import { COOKIE_NAME, verifyToken } from "./auth";
 import { prisma } from "./prisma";
+import { logger } from "./logger";
 
 type RouteParams = Record<string, string>;
 type RouteContext = { params: RouteParams; user: AuthUser };
@@ -19,7 +20,7 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
     const token = req.cookies.get(COOKIE_NAME)?.value;
     const pathname = req.nextUrl.pathname;
 
-    console.log("[AUTH] incoming request", {
+    logger.info("[AUTH] incoming request", {
       pathname,
       method: req.method,
       hasToken: Boolean(token),
@@ -27,7 +28,10 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
     });
 
     if (!token) {
-      console.warn("[AUTH] missing auth token", { pathname, method: req.method });
+      logger.warn("[AUTH] missing auth token", {
+        pathname,
+        method: req.method,
+      });
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 },
@@ -37,7 +41,7 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
     const payload = await verifyToken(token);
 
     if (!payload) {
-      console.warn("[AUTH] invalid or expired token", {
+      logger.warn("[AUTH] invalid or expired token", {
         pathname,
         method: req.method,
       });
@@ -48,7 +52,7 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
     }
 
     if (allowedRoles && !allowedRoles.includes(payload.role)) {
-      console.warn("[AUTH] forbidden by role", {
+      logger.warn("[AUTH] forbidden by role", {
         pathname,
         method: req.method,
         role: payload.role,
@@ -71,14 +75,17 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
     });
 
     if (!dbUser) {
-      console.warn("[AUTH] token subject does not exist in database", {
+      logger.warn("[AUTH] token subject does not exist in database", {
         pathname,
         method: req.method,
         userId: payload.sub,
       });
 
       const response = NextResponse.json(
-        { success: false, error: "Your session is no longer valid. Please sign in again." },
+        {
+          success: false,
+          error: "Your session is no longer valid. Please sign in again.",
+        },
         { status: 401 },
       );
       response.cookies.set(COOKIE_NAME, "", {
@@ -92,7 +99,7 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
     }
 
     if (allowedRoles && !allowedRoles.includes(dbUser.role)) {
-      console.warn("[AUTH] forbidden by current database role", {
+      logger.warn("[AUTH] forbidden by current database role", {
         pathname,
         method: req.method,
         role: dbUser.role,
@@ -104,7 +111,7 @@ export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
       );
     }
 
-    console.log("[AUTH] authorized", {
+    logger.info("[AUTH] authorized", {
       pathname,
       method: req.method,
       userId: dbUser.id,
@@ -168,9 +175,6 @@ export function serverError(
   error: unknown,
   message = "Internal server error",
 ): NextResponse {
-  console.error("[API Error]", error);
-  return NextResponse.json(
-    { success: false, error: message },
-    { status: 500 },
-  );
+  logger.error("[API Error]", { error });
+  return NextResponse.json({ success: false, error: message }, { status: 500 });
 }

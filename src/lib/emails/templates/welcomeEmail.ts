@@ -12,11 +12,11 @@ export function welcomeTemplate(name?: string) {
       </p>
 
       <p style="margin: 20px 0;">
-        <a href="https://yourdomain.com"
-           style="background:#000;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none;">
-           Go to Dashboard
-        </a>
-      </p>
+  <a href="${process.env.NEXT_PUBLIC_BASE_URL}"
+     style="background:#000;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none;">
+    Go to Dashboard
+  </a>
+</p>
 
       <p>If you need help, just reply to this email.</p>
 

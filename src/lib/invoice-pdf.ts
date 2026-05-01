@@ -310,13 +310,16 @@ export async function buildInvoicePdf(
     bold: true,
   });
 
-  drawText("Thank you for choosing WheelRent.", {
-    x: 56,
-    y: 72,
-    size: 11,
-    color: rgb(0.07, 0.11, 0.17),
-    bold: true,
-  });
+  drawText(
+    `Thank you for choosing ${process.env.NEXT_PUBLIC_COMPANY_NAME || "BioMobility"}.`,
+    {
+      x: 56,
+      y: 72,
+      size: 11,
+      color: rgb(0.07, 0.11, 0.17),
+      bold: true,
+    },
+  );
   drawText(
     "This invoice was generated automatically after payment confirmation.",
     {

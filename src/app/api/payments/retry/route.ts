@@ -1,4 +1,3 @@
-// src/app/api/payments/create-intent/route.ts
 import {
   withCustomerAuth,
   ok,
@@ -20,11 +19,7 @@ export const POST = withCustomerAuth(async (req, { user }) => {
       );
     }
 
-    const bookingId = parsed.data.bookingId;
-    logger.info("CREATE_INTENT_STARTED", { bookingId, userId: user.id });
-
-    const result = await paymentService.createIntent(bookingId, user.id);
-
+    const result = await paymentService.retryPayment(parsed.data.bookingId, user.id);
     return ok(result);
   } catch (error) {
     if (error instanceof SyntaxError) {

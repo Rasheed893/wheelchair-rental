@@ -45,6 +45,7 @@ enum PaymentMethod {
 enum BookingPaymentStatus {
   PENDING
   PAID
+  EXPIRED
 }
 
 enum WheelchairStatus {
@@ -135,6 +136,7 @@ model Booking {
   deliveryNotes   String?
   paymentMethod   PaymentMethod       @default(ONLINE)
   paymentStatus   BookingPaymentStatus @default(PENDING)
+  reservationExpiresAt DateTime?
   paidAt          DateTime?
   cancelledAt     DateTime?
   cancelReason    String?

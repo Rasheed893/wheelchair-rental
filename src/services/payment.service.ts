@@ -9,6 +9,7 @@ import {
   sendCustomerPaymentConfirmationEmail,
 } from "@/lib/emails/send-booking-confirmation-email";
 import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
+import { getLegacyReservationCutoff } from "@/lib/booking-reservation";
 
 const CURRENCY = "aed";
 
@@ -45,6 +46,46 @@ function isValidEmail(value: unknown): value is string {
 }
 
 export class PaymentService {
+  private async getRetriableBooking(bookingId: string, userId: string) {
+    const booking = await prisma.booking.findFirst({
+      where: { id: bookingId, userId },
+      include: { wheelchair: true, payment: true },
+    });
+
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (booking.paymentMethod !== "ONLINE") {
+      throw new Error("Retry payment is only available for ONLINE bookings");
+    }
+
+    if (booking.paymentStatus !== "PENDING" || booking.status !== "PENDING") {
+      throw new Error("Booking is no longer awaiting payment");
+    }
+
+    const now = new Date();
+    const isExpired =
+      (booking.reservationExpiresAt && booking.reservationExpiresAt <= now) ||
+      (!booking.reservationExpiresAt &&
+        booking.createdAt <= getLegacyReservationCutoff(now));
+
+    if (isExpired) {
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: {
+          paymentStatus: "EXPIRED",
+          status: "CANCELLED",
+          cancelledAt: now,
+          cancelReason: "Reservation expired before payment completion",
+        },
+      });
+      throw new Error("Booking expired");
+    }
+
+    return booking;
+  }
+
   async confirmPaymentIntentForUser(
     paymentIntentId: string,
     userId: string,
@@ -53,7 +94,7 @@ export class PaymentService {
     processed: boolean;
     reason?: string;
     bookingId?: string;
-    paymentStatus?: "PENDING" | "PAID";
+    paymentStatus?: "PENDING" | "PAID" | "EXPIRED";
   }> {
     const stripe = getStripeClient();
     const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
@@ -109,20 +150,10 @@ export class PaymentService {
   async createIntent(
     bookingId: string,
     userId: string,
+    forceNew = false,
   ): Promise<PaymentIntentResponse> {
     const stripe = getStripeClient();
-    const booking = await prisma.booking.findFirst({
-      where: { id: bookingId, userId },
-      include: { wheelchair: true, payment: true },
-    });
-
-    if (!booking) throw new Error("Booking not found");
-    if (booking.status !== "PENDING") {
-      throw new Error("Booking is not in a pending state");
-    }
-    if (booking.paymentMethod !== "ONLINE") {
-      throw new Error("Stripe payment is only available for ONLINE bookings");
-    }
+    const booking = await this.getRetriableBooking(bookingId, userId);
 
     const subtotal = Number(booking.totalPrice);
     const taxAmount = calculateTax(subtotal);
@@ -130,6 +161,7 @@ export class PaymentService {
     const amountInMinorUnit = Math.round(totalAmount * 100);
 
     if (
+      !forceNew &&
       booking.payment?.stripePaymentIntentId &&
       booking.payment.status === "PENDING"
     ) {
@@ -188,6 +220,25 @@ export class PaymentService {
     };
   }
 
+  async retryPayment(
+    bookingId: string,
+    userId: string,
+  ): Promise<
+    PaymentIntentResponse & {
+      bookingId: string;
+      paymentUrl: string;
+    }
+  > {
+    const booking = await this.getRetriableBooking(bookingId, userId);
+    const intent = await this.createIntent(booking.id, userId, true);
+
+    return {
+      ...intent,
+      bookingId: booking.id,
+      paymentUrl: `/wheelchairs/${booking.wheelchairId}/book?bookingId=${booking.id}`,
+    };
+  }
+
   async handleWebhook(event: import("stripe").Stripe.Event): Promise<void> {
     switch (event.type) {
       case "payment_intent.succeeded": {
@@ -240,45 +291,44 @@ export class PaymentService {
       return;
     }
 
-    if (booking.paymentStatus === "PAID") {
-      return;
+    if (booking.paymentStatus !== "PAID") {
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.upsert({
+          where: { bookingId },
+          update: {
+            stripePaymentIntentId: intent.id,
+            amount: Number(intent.amount) / 100,
+            currency: intent.currency,
+            status: "SUCCEEDED",
+            paidAt: new Date(),
+            metadata: toInputJson({
+              ...this.getPaymentMetadata(booking.payment?.metadata),
+              ...toJson(intent),
+            }),
+          },
+          create: {
+            bookingId,
+            stripePaymentIntentId: intent.id,
+            amount: Number(intent.amount) / 100,
+            currency: intent.currency,
+            status: "SUCCEEDED",
+            paidAt: new Date(),
+            metadata: toJson(intent),
+          },
+        });
+
+        await tx.booking.update({
+          where: { id: bookingId },
+          data: {
+            status: "CONFIRMED",
+            paymentMethod: "ONLINE",
+            paymentStatus: "PAID",
+            reservationExpiresAt: null,
+            paidAt: new Date(),
+          },
+        });
+      });
     }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.payment.upsert({
-        where: { bookingId },
-        update: {
-          stripePaymentIntentId: intent.id,
-          amount: Number(intent.amount) / 100,
-          currency: intent.currency,
-          status: "SUCCEEDED",
-          paidAt: new Date(),
-          metadata: toInputJson({
-            ...this.getPaymentMetadata(booking.payment?.metadata),
-            ...toJson(intent),
-          }),
-        },
-        create: {
-          bookingId,
-          stripePaymentIntentId: intent.id,
-          amount: Number(intent.amount) / 100,
-          currency: intent.currency,
-          status: "SUCCEEDED",
-          paidAt: new Date(),
-          metadata: toJson(intent),
-        },
-      });
-
-      await tx.booking.update({
-        where: { id: bookingId },
-        data: {
-          status: "CONFIRMED",
-          paymentMethod: "ONLINE",
-          paymentStatus: "PAID",
-          paidAt: new Date(),
-        },
-      });
-    });
 
     const invoice = await this.prepareInvoiceNotificationData(
       bookingId,

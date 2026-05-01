@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import "react-day-picker/dist/style.css";
 import { formatAED } from "@/lib/currency";
 import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
+import { logger } from "@sentry/nextjs";
 
 const stripePublishableKey =
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
@@ -125,16 +126,21 @@ export default function BookPage({
   const totalPrice = calculateTotal(subtotal, VAT_RATE);
 
   const initializePayment = useCallback(
-    async (targetBookingId: string) => {
+    async (targetBookingId: string, mode: "initial" | "retry" = "initial") => {
       setLoading(true);
       setError(null);
 
       try {
-        const response = await fetch("/api/payments/create-intent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bookingId: targetBookingId }),
-        });
+        const response = await fetch(
+          mode === "retry"
+            ? "/api/payments/retry"
+            : "/api/payments/create-intent",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bookingId: targetBookingId }),
+          },
+        );
         const data = await response.json();
 
         if (!data.success || !data.data?.clientSecret) {
@@ -183,23 +189,29 @@ export default function BookPage({
 
   useEffect(() => {
     if (bookingId && !clientSecret) {
-      void initializePayment(bookingId);
+      void initializePayment(bookingId, "retry");
     }
   }, [bookingId, clientSecret, initializePayment]);
 
-  const [bookingStatus, setBookingStatus] = useState<string | null>(null);
+  const [bookingPaymentStatus, setBookingPaymentStatus] = useState<
+    "PENDING" | "PAID" | "EXPIRED" | null
+  >(null);
   const [customerName, setCustomerName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "CASH">("ONLINE");
+  const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "CASH">(
+    "ONLINE",
+  );
 
   useEffect(() => {
     if (bookingIdState) {
       fetch(`/api/bookings/${bookingIdState}`)
         .then((res) => res.json())
         .then((data) => {
-          if (data.success) setBookingStatus(data.data.status);
+          if (data.success) {
+            setBookingPaymentStatus(data.data.paymentStatus);
+          }
         });
     }
   }, [bookingIdState]);
@@ -241,7 +253,7 @@ export default function BookPage({
     setError(null);
 
     try {
-      console.log("Creating booking payload", {
+      logger.info("Creating booking payload", {
         wheelchairId,
         startDate,
         endDate,
@@ -271,10 +283,12 @@ export default function BookPage({
       const newBookingId = bookingData.data.id;
       setBookingId(newBookingId);
       if (paymentMethod === "CASH") {
-        router.push(`/${locale}/payment/success?bookingId=${newBookingId}&method=CASH`);
+        router.push(
+          `/${locale}/payment/success?bookingId=${newBookingId}&method=CASH`,
+        );
         return;
       }
-      await initializePayment(newBookingId);
+      await initializePayment(newBookingId, "initial");
     } catch (bookingError) {
       setError(
         bookingError instanceof Error
@@ -294,6 +308,8 @@ export default function BookPage({
   }
 
   const name = locale === "ar" ? wheelchair.nameAr : wheelchair.name;
+  const bookingIsPaid = bookingPaymentStatus === "PAID";
+  const bookingExpired = bookingPaymentStatus === "EXPIRED";
 
   return (
     <div className="page-container py-10">
@@ -350,7 +366,9 @@ export default function BookPage({
                     onChange={(e) => setDeliveryNotes(e.target.value)}
                   />
                   <div className="rounded-xl border border-slate-200 p-3">
-                    <p className="mb-2 text-sm font-medium text-slate-700">Payment Method</p>
+                    <p className="mb-2 text-sm font-medium text-slate-700">
+                      Payment Method
+                    </p>
                     <div className="flex gap-3 text-sm">
                       <label className="flex items-center gap-2">
                         <input
@@ -397,7 +415,7 @@ export default function BookPage({
                 </h2>
 
                 {/* If booking is already confirmed, show success instead of Stripe */}
-                {bookingStatus === "CONFIRMED" ? (
+                {bookingIsPaid ? (
                   <div className="py-8 text-center">
                     <div className="mb-4 text-4xl text-green-500">✅</div>
                     <p className="font-semibold text-green-700">
@@ -413,6 +431,24 @@ export default function BookPage({
                       Go to Dashboard
                     </button>
                   </div>
+                ) : bookingExpired ? (
+                  <div className="space-y-4 py-8 text-center">
+                    <p className="font-semibold text-slate-900">
+                      Booking expired
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      This reservation is no longer payable. Please create a new
+                      booking.
+                    </p>
+                    <button
+                      onClick={() =>
+                        router.push(`/${locale}/wheelchairs/${id}/book`)
+                      }
+                      className="btn-outline w-full justify-center"
+                    >
+                      Start New Booking
+                    </button>
+                  </div>
                 ) : !stripePromise ? (
                   <div className="space-y-4 py-8 text-center text-red-600">
                     <p>Stripe is not configured for this environment.</p>
@@ -422,10 +458,7 @@ export default function BookPage({
                     stripe={stripePromise}
                     options={{ clientSecret, appearance: { theme: "stripe" } }}
                   >
-                    <PaymentForm
-                      bookingId={bookingIdState}
-                      locale={locale}
-                    />
+                    <PaymentForm bookingId={bookingIdState} locale={locale} />
                   </Elements>
                 ) : (
                   <div className="space-y-4 py-8 text-center text-slate-400">
@@ -484,7 +517,9 @@ export default function BookPage({
                   <hr className="my-2 border-slate-100" />
                   <div className="flex justify-between text-base font-bold">
                     <span>Total</span>
-                    <span className="text-primary-700">{formatAED(totalPrice)}</span>
+                    <span className="text-primary-700">
+                      {formatAED(totalPrice)}
+                    </span>
                   </div>
                 </div>
               ) : (

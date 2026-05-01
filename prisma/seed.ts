@@ -152,7 +152,7 @@ const wheelchairs: Array<{
 ];
 
 async function main() {
-  console.log("[SEED] Seeding database...");
+  // console.log("[SEED] Seeding database...");
 
   const adminEmail = getSeedValue("ADMIN_EMAIL");
   const adminPassword = getSeedValue("ADMIN_PASSWORD");
@@ -177,7 +177,7 @@ async function main() {
     },
   });
 
-  console.log("[SEED] Admin user ready", { email: admin.email });
+  // console.log("[SEED] Admin user ready", { email: admin.email });
 
   for (const wheelchair of wheelchairs) {
     await prisma.wheelchair.upsert({
@@ -187,7 +187,7 @@ async function main() {
     });
   }
 
-  console.log("[SEED] Wheelchairs ready", { count: wheelchairs.length });
+  // console.log("[SEED] Wheelchairs ready", { count: wheelchairs.length });
 
   await prisma.invoiceCounter.upsert({
     where: { id: 1 },
@@ -195,7 +195,7 @@ async function main() {
     create: { id: 1, year: new Date().getFullYear(), count: 0 },
   });
 
-  console.log("[SEED] Seed complete");
+  // console.log("[SEED] Seed complete");
 }
 
 main()
