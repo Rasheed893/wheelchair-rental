@@ -12,3 +12,25 @@ export function calculateTotal(subtotal: number, taxRate = VAT_RATE): number {
   return roundCurrency(subtotal + calculateTax(subtotal, taxRate));
 }
 
+export function calculateBookingSubtotal(
+  totalDays: number,
+  pricePerDay: number,
+): number {
+  return roundCurrency(totalDays * pricePerDay);
+}
+
+export function calculateBookingPricing(
+  totalDays: number,
+  pricePerDay: number,
+  taxRate = VAT_RATE,
+) {
+  const subtotal = calculateBookingSubtotal(totalDays, pricePerDay);
+  const taxAmount = calculateTax(subtotal, taxRate);
+  const totalAmount = calculateTotal(subtotal, taxRate);
+
+  return {
+    subtotal,
+    taxAmount,
+    totalAmount,
+  };
+}

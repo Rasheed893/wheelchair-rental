@@ -9,6 +9,7 @@ import { Prisma } from "@prisma/client";
 import type { Invoice } from "@prisma/client";
 import {
   VAT_RATE,
+  calculateBookingPricing,
   calculateTax,
   calculateTotal,
   roundCurrency,
@@ -54,7 +55,11 @@ export class InvoiceService {
       (await this.createInvoiceRecord(
         bookingId,
         userId,
-        booking.totalPrice,
+        calculateBookingPricing(
+          booking.totalDays,
+          Number(booking.wheelchair.pricePerDay),
+          this.TAX_RATE,
+        ).subtotal,
         booking.payment?.amount,
       ));
 

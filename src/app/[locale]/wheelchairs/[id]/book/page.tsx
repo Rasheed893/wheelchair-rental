@@ -13,8 +13,9 @@ import {
 import { loadStripe } from "@stripe/stripe-js";
 import { useRouter } from "next/navigation";
 import "react-day-picker/dist/style.css";
+import type { BookingWithRelations } from "@/types";
 import { formatAED } from "@/lib/currency";
-import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
+import { VAT_RATE, calculateBookingPricing } from "@/lib/pricing";
 import { logger } from "@sentry/nextjs";
 
 const stripePublishableKey =
@@ -102,6 +103,8 @@ export default function BookPage({
   const router = useRouter();
 
   const [wheelchair, setWheelchair] = useState<WheelchairInfo | null>(null);
+  const [existingBooking, setExistingBooking] =
+    useState<BookingWithRelations | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [step, setStep] = useState<"dates" | "payment">(
     bookingId ? "payment" : "dates",
@@ -121,9 +124,14 @@ export default function BookPage({
     return Math.max(1, differenceInDays(dateRange.to, dateRange.from));
   }, [dateRange]);
 
-  const subtotal = wheelchair ? days * Number(wheelchair.pricePerDay) : 0;
-  const taxAmount = calculateTax(subtotal, VAT_RATE);
-  const totalPrice = calculateTotal(subtotal, VAT_RATE);
+  const activeTotalDays = existingBooking?.totalDays ?? days;
+  const activePricePerDay =
+    existingBooking?.wheelchair?.pricePerDay ?? wheelchair?.pricePerDay ?? 0;
+  const { subtotal, taxAmount, totalAmount } = calculateBookingPricing(
+    activeTotalDays,
+    Number(activePricePerDay),
+    VAT_RATE,
+  );
 
   const initializePayment = useCallback(
     async (targetBookingId: string, mode: "initial" | "retry" = "initial") => {
@@ -210,6 +218,7 @@ export default function BookPage({
         .then((res) => res.json())
         .then((data) => {
           if (data.success) {
+            setExistingBooking(data.data);
             setBookingPaymentStatus(data.data.paymentStatus);
           }
         });
@@ -518,7 +527,44 @@ export default function BookPage({
                   <div className="flex justify-between text-base font-bold">
                     <span>Total</span>
                     <span className="text-primary-700">
-                      {formatAED(totalPrice)}
+                      {formatAED(totalAmount)}
+                    </span>
+                  </div>
+                </div>
+              ) : existingBooking ? (
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">From</span>
+                    <span className="font-medium">
+                      {format(new Date(existingBooking.startDate), "MMM d, yyyy")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">To</span>
+                    <span className="font-medium">
+                      {format(new Date(existingBooking.endDate), "MMM d, yyyy")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Duration</span>
+                    <span className="font-medium">
+                      {existingBooking.totalDays} days
+                    </span>
+                  </div>
+                  <hr className="my-2 border-slate-100" />
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Subtotal</span>
+                    <span>{formatAED(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Tax ({(VAT_RATE * 100).toFixed(0)}%)</span>
+                    <span>{formatAED(taxAmount)}</span>
+                  </div>
+                  <hr className="my-2 border-slate-100" />
+                  <div className="flex justify-between text-base font-bold">
+                    <span>Total</span>
+                    <span className="text-primary-700">
+                      {formatAED(totalAmount)}
                     </span>
                   </div>
                 </div>

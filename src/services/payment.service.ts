@@ -8,7 +8,7 @@ import {
   sendAdminPaymentConfirmationEmail,
   sendCustomerPaymentConfirmationEmail,
 } from "@/lib/emails/send-booking-confirmation-email";
-import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
+import { VAT_RATE, calculateBookingPricing } from "@/lib/pricing";
 import { getLegacyReservationCutoff } from "@/lib/booking-reservation";
 
 const CURRENCY = "aed";
@@ -29,6 +29,12 @@ type InvoiceNotificationData = {
   totalAmount: number;
 };
 
+type BookingPricingSnapshot = {
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+};
+
 function toJson<T>(value: T) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -46,6 +52,24 @@ function isValidEmail(value: unknown): value is string {
 }
 
 export class PaymentService {
+  private getBookingPricingSnapshot(booking: {
+    totalDays: number;
+    wheelchair: { pricePerDay: Prisma.Decimal | number };
+  }): BookingPricingSnapshot {
+    const totalDays = Number(booking.totalDays);
+    const pricePerDay = Number(booking.wheelchair.pricePerDay);
+
+    if (!Number.isFinite(totalDays) || totalDays <= 0) {
+      throw new Error("Booking is invalid");
+    }
+
+    if (!Number.isFinite(pricePerDay) || pricePerDay <= 0) {
+      throw new Error("Booking pricing is invalid");
+    }
+
+    return calculateBookingPricing(totalDays, pricePerDay, VAT_RATE);
+  }
+
   private async getRetriableBooking(bookingId: string, userId: string) {
     const booking = await prisma.booking.findFirst({
       where: { id: bookingId, userId },
@@ -82,6 +106,8 @@ export class PaymentService {
       });
       throw new Error("Booking expired");
     }
+
+    this.getBookingPricingSnapshot(booking);
 
     return booking;
   }
@@ -155,9 +181,8 @@ export class PaymentService {
     const stripe = getStripeClient();
     const booking = await this.getRetriableBooking(bookingId, userId);
 
-    const subtotal = Number(booking.totalPrice);
-    const taxAmount = calculateTax(subtotal);
-    const totalAmount = calculateTotal(subtotal);
+    const { subtotal, taxAmount, totalAmount } =
+      this.getBookingPricingSnapshot(booking);
     const amountInMinorUnit = Math.round(totalAmount * 100);
 
     if (
@@ -278,7 +303,7 @@ export class PaymentService {
       where: { id: bookingId },
       include: {
         user: { select: { id: true, email: true, name: true } },
-        wheelchair: { select: { name: true } },
+        wheelchair: { select: { name: true, pricePerDay: true } },
         payment: true,
       },
     });
@@ -333,10 +358,9 @@ export class PaymentService {
     const invoice = await this.prepareInvoiceNotificationData(
       bookingId,
       booking.user.id,
-      Number(
-        booking.payment?.amount ??
-          calculateTotal(Number(booking.totalPrice), VAT_RATE),
-      ),
+      booking.payment?.amount
+        ? Number(booking.payment.amount)
+        : this.getBookingPricingSnapshot(booking).totalAmount,
     );
 
     try {
@@ -437,7 +461,7 @@ export class PaymentService {
       include: {
         user: { select: { id: true, email: true, name: true } },
         payment: true,
-        wheelchair: { select: { name: true } },
+        wheelchair: { select: { name: true, pricePerDay: true } },
       },
     });
 
@@ -501,10 +525,9 @@ export class PaymentService {
     const invoice = await this.prepareInvoiceNotificationData(
       bookingId,
       booking.user.id,
-      Number(
-        booking.payment?.amount ??
-          calculateTotal(Number(booking.totalPrice), VAT_RATE),
-      ),
+      booking.payment?.amount
+        ? Number(booking.payment.amount)
+        : this.getBookingPricingSnapshot(booking).totalAmount,
     );
 
     try {

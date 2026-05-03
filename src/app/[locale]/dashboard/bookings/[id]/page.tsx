@@ -7,7 +7,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import type { BookingWithRelations } from "@/types";
 import { formatAED } from "@/lib/currency";
-import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
+import { VAT_RATE, calculateBookingPricing } from "@/lib/pricing";
 
 interface Props {
   params: Promise<{ locale: string; id: string }>;
@@ -130,10 +130,10 @@ export default function BookingDetailPage({ params }: Props) {
     booking.paymentMethod === "ONLINE" &&
     booking.paymentStatus === "PENDING" &&
     !isExpired;
-  const subtotal = Number(invoice?.subtotal ?? booking.totalPrice);
-  const taxAmount = Number(invoice?.taxAmount ?? calculateTax(subtotal, VAT_RATE));
-  const totalAmount = Number(
-    invoice?.totalAmount ?? booking.payment?.amount ?? calculateTotal(subtotal, VAT_RATE),
+  const { subtotal, taxAmount, totalAmount } = calculateBookingPricing(
+    booking.totalDays,
+    Number(booking.wheelchair.pricePerDay),
+    VAT_RATE,
   );
 
   return (
@@ -268,7 +268,9 @@ export default function BookingDetailPage({ params }: Props) {
                   <p className="text-xs text-blue-600 font-medium mb-1">
                     {isAr ? "ملاحظات التوصيل" : "Delivery Notes"}
                   </p>
-                  <p className="text-sm text-blue-800">{booking.deliveryNotes}</p>
+                  <p className="text-sm text-blue-800">
+                    {booking.deliveryNotes}
+                  </p>
                 </div>
               )}
 
@@ -280,7 +282,9 @@ export default function BookingDetailPage({ params }: Props) {
                 <p className="mt-3 text-xs text-slate-500 font-medium mb-1">
                   📍 {isAr ? "عنوان التوصيل" : "Delivery Address"}
                 </p>
-                <p className="text-sm text-slate-700">{booking.deliveryAddress}</p>
+                <p className="text-sm text-slate-700">
+                  {booking.deliveryAddress}
+                </p>
               </div>
 
               {booking.cancelledAt && (
@@ -295,7 +299,10 @@ export default function BookingDetailPage({ params }: Props) {
                   {supportPhone && (
                     <p className="text-sm text-red-800 mt-2">
                       {isAr ? "للمساعدة اتصل على: " : "Need help? Call: "}
-                      <a className="underline font-semibold" href={`tel:${supportPhone}`}>
+                      <a
+                        className="underline font-semibold"
+                        href={`tel:${supportPhone}`}
+                      >
                         {supportPhone}
                       </a>
                     </p>
@@ -333,7 +340,11 @@ export default function BookingDetailPage({ params }: Props) {
                   <span className="text-slate-500">
                     {isAr ? "طريقة الدفع" : "Method"}
                   </span>
-                  <span>{booking.paymentMethod === "CASH" ? "Cash on Delivery" : "Online (Stripe)"}</span>
+                  <span>
+                    {booking.paymentMethod === "CASH"
+                      ? "Cash on Delivery"
+                      : "Online (Stripe)"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">
@@ -345,57 +356,60 @@ export default function BookingDetailPage({ params }: Props) {
                         ? "🟢 مدفوع"
                         : "🟢 Paid"
                       : booking.paymentStatus === "EXPIRED" || isExpired
-                        ? (isAr ? "منتهي" : "Expired")
-                      : booking.paymentMethod === "CASH"
                         ? isAr
-                          ? "🟡 معلق (الدفع عند الاستلام)"
-                          : "🟡 Pending (Cash on Delivery)"
-                        : isAr
-                          ? "🟡 بانتظار الدفع"
-                          : "🟡 Pending"}
+                          ? "منتهي"
+                          : "Expired"
+                        : booking.paymentMethod === "CASH"
+                          ? isAr
+                            ? "🟡 معلق (الدفع عند الاستلام)"
+                            : "🟡 Pending (Cash on Delivery)"
+                          : isAr
+                            ? "🟡 بانتظار الدفع"
+                            : "🟡 Pending"}
                   </span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">
+                    {isAr ? "المبلغ الأساسي" : "Subtotal"}
+                  </span>
+                  <span className="font-semibold">{formatAED(subtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">
+                    {isAr
+                      ? `ضريبة (${(VAT_RATE * 100).toFixed(0)}%)`
+                      : `Tax (${(VAT_RATE * 100).toFixed(0)}%)`}
+                  </span>
+                  <span>{formatAED(taxAmount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">
+                    {isAr ? "الإجمالي" : "Total"}
+                  </span>
+                  <span className="font-semibold">
+                    {formatAED(totalAmount)}
+                  </span>
+                </div>
+                {booking.paidAt && (
                   <div className="flex justify-between">
                     <span className="text-slate-500">
-                      {isAr ? "المبلغ الأساسي" : "Subtotal"}
+                      {isAr ? "تاريخ الدفع" : "Paid At"}
                     </span>
-                    <span className="font-semibold">{formatAED(subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">
-                      {isAr
-                        ? `ضريبة (${(VAT_RATE * 100).toFixed(0)}%)`
-                        : `Tax (${(VAT_RATE * 100).toFixed(0)}%)`}
+                    <span>
+                      {format(new Date(booking.paidAt), "MMM d, yyyy HH:mm")}
                     </span>
-                    <span>{formatAED(taxAmount)}</span>
                   </div>
+                )}
+                {booking.payment?.stripePaymentIntentId && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">{isAr ? "الإجمالي" : "Total"}</span>
-                    <span className="font-semibold">{formatAED(totalAmount)}</span>
-                  </div>
-                  {booking.paidAt && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">
-                        {isAr ? "تاريخ الدفع" : "Paid At"}
-                      </span>
-                      <span>
-                        {format(
-                          new Date(booking.paidAt),
-                          "MMM d, yyyy HH:mm",
-                        )}
-                      </span>
-                    </div>
-                  )}
-                  {booking.payment?.stripePaymentIntentId && (
-                    <div className="flex justify-between">
                     <span className="text-slate-500">
                       {isAr ? "مرجع Stripe" : "Stripe Ref"}
                     </span>
                     <span className="font-mono text-xs text-slate-400">
                       {booking.payment.stripePaymentIntentId.slice(-12)}
                     </span>
-                    </div>
-                  )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -433,22 +447,34 @@ export default function BookingDetailPage({ params }: Props) {
                   <hr className="border-slate-100 my-1" />
                   <div className="flex justify-between font-bold">
                     <span>{isAr ? "الإجمالي" : "Total"}</span>
-                    <span className="text-primary-700">{formatAED(Number(invoice.totalAmount))}</span>
+                    <span className="text-primary-700">
+                      {formatAED(Number(invoice.totalAmount))}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">{isAr ? "طريقة الدفع" : "Payment Method"}</span>
-                    <span>{booking.paymentMethod === "CASH" ? "Cash on Delivery" : "Online (Stripe)"}</span>
+                    <span className="text-slate-500">
+                      {isAr ? "طريقة الدفع" : "Payment Method"}
+                    </span>
+                    <span>
+                      {booking.paymentMethod === "CASH"
+                        ? "Cash on Delivery"
+                        : "Online (Stripe)"}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">{isAr ? "حالة الدفع" : "Payment Status"}</span>
+                    <span className="text-slate-500">
+                      {isAr ? "حالة الدفع" : "Payment Status"}
+                    </span>
                     <span>
                       {booking.paymentStatus === "PAID"
                         ? "Paid"
                         : booking.paymentStatus === "EXPIRED" || isExpired
-                          ? (isAr ? "منتهي" : "Expired")
-                        : booking.paymentMethod === "CASH"
-                          ? "Unpaid (Cash on Delivery)"
-                          : "Pending"}
+                          ? isAr
+                            ? "منتهي"
+                            : "Expired"
+                          : booking.paymentMethod === "CASH"
+                            ? "Unpaid (Cash on Delivery)"
+                            : "Pending"}
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 text-center pt-1">
@@ -472,7 +498,9 @@ export default function BookingDetailPage({ params }: Props) {
                           href={invoice.downloadUrl}
                           className="btn-primary w-full justify-center text-sm"
                         >
-                          {isAr ? "ØªØ­Ù…ÙŠÙ„ Ø§Ù„ÙØ§ØªÙˆØ±Ø©" : "Download Invoice"}
+                          {isAr
+                            ? "ØªØ­Ù…ÙŠÙ„ Ø§Ù„ÙØ§ØªÙˆØ±Ø©"
+                            : "Download Invoice"}
                         </a>
                       )}
                     </div>

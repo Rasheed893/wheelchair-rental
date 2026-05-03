@@ -44,15 +44,17 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
       ? isAr
         ? "🟢 مدفوع"
         : "🟢 Paid"
-        : booking.paymentStatus === "EXPIRED" || reservationExpired
-          ? (isAr ? "منتهي" : "Expired")
-        : booking.paymentMethod === "CASH"
+      : booking.paymentStatus === "EXPIRED" || reservationExpired
         ? isAr
-          ? "🟡 معلق (الدفع عند الاستلام)"
-          : "🟡 Pending (Cash on Delivery)"
-        : isAr
-          ? "🟡 بانتظار الدفع"
-          : "🟡 Pending";
+          ? "منتهي"
+          : "Expired"
+        : booking.paymentMethod === "CASH"
+          ? isAr
+            ? "🟡 معلق (الدفع عند الاستلام)"
+            : "🟡 Pending (Cash on Delivery)"
+          : isAr
+            ? "🟡 بانتظار الدفع"
+            : "🟡 Pending";
 
   return (
     <div className="card p-5 animate-slide-up">
@@ -111,16 +113,16 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
         </Link>
 
         {booking.status === "PENDING" &&
-        booking.paymentMethod === "ONLINE" &&
-        booking.paymentStatus === "PENDING" &&
-        !reservationExpired && (
-          <Link
-            href={`/${locale}/wheelchairs/${booking.wheelchairId}/book?bookingId=${booking.id}`}
-            className="btn-primary py-1.5 px-3 text-xs"
-          >
-            {isAr ? "أكمل الدفع" : "Complete Payment"}
-          </Link>
-        )}
+          booking.paymentMethod === "ONLINE" &&
+          booking.paymentStatus === "PENDING" &&
+          !reservationExpired && (
+            <Link
+              href={`/${locale}/wheelchairs/${booking.wheelchairId}/book?bookingId=${booking.id}`}
+              className="btn-primary py-1.5 px-3 text-xs"
+            >
+              {isAr ? "أكمل الدفع" : "`Complete Payment`"}
+            </Link>
+          )}
 
         {booking.invoice && (
           <Link
