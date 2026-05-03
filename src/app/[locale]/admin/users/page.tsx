@@ -27,22 +27,32 @@ export default function AdminUsersPage() {
   const [total, setTotal] = useState(0);
 
   const fetchUsers = useCallback(async () => {
-    setLoading(true);
-    const params = new URLSearchParams({ page: String(page), pageSize: "20" });
-    const res = await fetch(`/api/admin/users?${params}`);
-    const data = await res.json();
-    if (data.success) {
-      setUsers(data.data.data);
-      setTotalPages(data.data.totalPages);
-      setTotal(data.data.total);
+    try {
+      setLoading(true);
+
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: "20",
+      });
+
+      const res = await fetch(`/api/admin/users?${params}`);
+      const data = await res.json();
+
+      if (data.success) {
+        setUsers(data.data.data);
+        setTotalPages(data.data.totalPages);
+        setTotal(data.data.total);
+      }
+    } catch (err) {
+      console.error("Failed to fetch users", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [page]);
 
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
-
   const filtered = search.trim()
     ? users.filter(
         (u) =>

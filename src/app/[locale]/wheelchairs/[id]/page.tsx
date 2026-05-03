@@ -136,7 +136,7 @@ function ProductJsonLd({ wheelchair, locale }: JsonLdProps) {
   const image = wheelchair.images?.[0] ?? `${BASE_URL}/og-default.jpg`;
   const url = buildUrl(locale as Locale, `/wheelchairs/${wheelchair.id}`);
 
-  const priceValidUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+  const priceValidUntil = new Date(new Date().getFullYear() + 1, 0, 1)
     .toISOString()
     .split("T")[0];
 

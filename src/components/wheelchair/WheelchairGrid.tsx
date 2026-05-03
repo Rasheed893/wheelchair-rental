@@ -1,7 +1,7 @@
 // src/components/wheelchair/WheelchairGrid.tsx
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import WheelchairCard from "./WheelchairCard";
 import { useWheelchairs } from "@/hooks/useWheelchairs";
 import { Spinner } from "@/components/ui/Spinner";
@@ -35,15 +35,16 @@ export function WheelchairGrid({ locale, initialCategory }: Props) {
   const [page, setPage] = useState(1);
 
   // Debounce search
-  let debounceTimer: ReturnType<typeof setTimeout>;
-  function handleSearch(val: string) {
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearch = (val: string) => {
     setSearch(val);
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
       setDebouncedSearch(val);
       setPage(1);
     }, 400);
-  }
+  };
 
   const { data, loading, error } = useWheelchairs({
     category,
@@ -93,7 +94,7 @@ export function WheelchairGrid({ locale, initialCategory }: Props) {
           {debouncedSearch && (
             <span>
               {" "}
-              {isAr ? "لـ" : "for"} "{debouncedSearch}"
+              {isAr ? "لـ" : "for"} {`"${debouncedSearch}"`}
             </span>
           )}
         </p>
