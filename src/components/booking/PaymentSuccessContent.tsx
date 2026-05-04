@@ -24,9 +24,9 @@ export default function PaymentSuccessContent({
   const [syncStatus, setSyncStatus] = useState<
     "pending" | "success" | "failed"
   >(isCash ? "success" : "pending");
-  const [paymentStatus, setPaymentStatus] = useState<BookingPaymentStatus | null>(
-    isCash ? "PAID" : null,
-  );
+  const [paymentStatus, setPaymentStatus] =
+    useState<BookingPaymentStatus | null>(isCash ? "PAID" : null);
+  // const [supportPhone, setSupportPhone] = useState("");
 
   useEffect(() => {
     if (!bookingId || isCash) {
@@ -49,6 +49,19 @@ export default function PaymentSuccessContent({
       }
     })();
   }, [bookingId, isCash]);
+
+  // useEffect(() => {
+  //   fetch("/api/config/support-phone")
+  //     .then((res) => res.json())
+  //     .then((data) => {
+  //       if (data.success && typeof data.data?.supportPhone === "string") {
+  //         setSupportPhone(data.data.supportPhone);
+  //       }
+  //     })
+  //     .catch(() => {
+  //       setSupportPhone("");
+  //     });
+  // }, []);
 
   const isReady = isCash || paymentStatus === "PAID";
   const isExpired = paymentStatus === "EXPIRED";
@@ -102,6 +115,19 @@ export default function PaymentSuccessContent({
           {title}
         </h1>
         <p className="text-slate-500 mb-8 leading-relaxed">{description}</p>
+        {isReady && (
+          <div className="mb-6 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
+            {isAr
+              ? "تلقينا طلبك! سيقوم فريقنا بتأكيد موعد التسليم خلال ساعتين. للطلبات العاجلة اتصل بنا:"
+              : "We've received your booking! Our team will confirm your delivery window within 2 hours. For urgent requests call:"}{" "}
+            <a
+              href={`tel:${process.env.NEXT_PUBLIC_SUPPORT_PHONE}`}
+              className="font-bold underline"
+            >
+              {process.env.NEXT_PUBLIC_SUPPORT_PHONE}
+            </a>
+          </div>
+        )}
 
         {syncStatus === "pending" && paymentStatus !== "PAID" ? (
           <p className="mb-4 text-sm text-slate-500">

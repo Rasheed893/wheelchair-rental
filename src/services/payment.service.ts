@@ -8,8 +8,9 @@ import {
   sendAdminPaymentConfirmationEmail,
   sendCustomerPaymentConfirmationEmail,
 } from "@/lib/emails/send-booking-confirmation-email";
-import { VAT_RATE, calculateBookingPricing } from "@/lib/pricing";
+import { calculateBookingPricing } from "@/lib/pricing";
 import { getLegacyReservationCutoff } from "@/lib/booking-reservation";
+import { getOptionalEnv } from "@/lib/env";
 
 const CURRENCY = "aed";
 
@@ -34,8 +35,9 @@ type InvoiceNotificationData = {
 
 type BookingPricingSnapshot = {
   subtotal: number;
-  taxAmount: number;
-  totalAmount: number;
+  deliveryFee: number;
+  tax: number;
+  total: number;
 };
 
 function toJson<T>(value: T) {
@@ -57,6 +59,7 @@ function isValidEmail(value: unknown): value is string {
 export class PaymentService {
   private getBookingPricingSnapshot(booking: {
     totalDays: number;
+    deliveryFee: Prisma.Decimal | number;
     wheelchair: { pricePerDay: Prisma.Decimal | number };
   }): BookingPricingSnapshot {
     const totalDays = Number(booking.totalDays);
@@ -70,7 +73,11 @@ export class PaymentService {
       throw new Error("Booking pricing is invalid");
     }
 
-    return calculateBookingPricing(totalDays, pricePerDay, VAT_RATE);
+    return calculateBookingPricing(
+      totalDays,
+      pricePerDay,
+      Number(booking.deliveryFee),
+    );
   }
 
   private async getRetriableBooking(bookingId: string, userId: string) {
@@ -184,9 +191,9 @@ export class PaymentService {
     const stripe = getStripeClient();
     const booking = await this.getRetriableBooking(bookingId, userId);
 
-    const { subtotal, taxAmount, totalAmount } =
+    const { subtotal, deliveryFee, tax, total } =
       this.getBookingPricingSnapshot(booking);
-    const amountInMinorUnit = Math.round(totalAmount * 100);
+    const amountInMinorUnit = Math.round(total * 100);
 
     if (
       !forceNew &&
@@ -213,19 +220,19 @@ export class PaymentService {
         bookingId: booking.id,
         userId,
         wheelchairId: booking.wheelchairId,
-        taxRate: String(VAT_RATE),
         subtotal: subtotal.toFixed(2),
-        taxAmount: taxAmount.toFixed(2),
-        totalAmount: totalAmount.toFixed(2),
+        deliveryFee: deliveryFee.toFixed(2),
+        taxAmount: tax.toFixed(2),
+        totalAmount: total.toFixed(2),
       },
-      description: `Wheelchair rental: ${booking.wheelchair.name} (${booking.totalDays} days, incl. VAT)`,
+      description: `Wheelchair rental: ${booking.wheelchair.name} (${booking.totalDays} days, delivery included)`,
     });
 
     await prisma.payment.upsert({
       where: { bookingId: booking.id },
       update: {
         stripePaymentIntentId: intent.id,
-        amount: totalAmount,
+        amount: total,
         currency: CURRENCY,
         status: "PENDING",
         metadata: toJson(intent.metadata),
@@ -233,7 +240,7 @@ export class PaymentService {
       create: {
         bookingId: booking.id,
         stripePaymentIntentId: intent.id,
-        amount: totalAmount,
+        amount: total,
         currency: CURRENCY,
         status: "PENDING",
         metadata: toJson(intent.metadata),
@@ -363,7 +370,7 @@ export class PaymentService {
       booking.user.id,
       booking.payment?.amount
         ? Number(booking.payment.amount)
-        : this.getBookingPricingSnapshot(booking).totalAmount,
+        : this.getBookingPricingSnapshot(booking).total,
     );
 
     try {
@@ -372,6 +379,8 @@ export class PaymentService {
         customerEmail: booking.user.email,
         customerName: booking.user.name,
         phoneNumber: booking.phoneNumber,
+        deliveryCity: booking.deliveryCity,
+        deliveryWindow: booking.deliveryWindow,
         deliveryAddress: booking.deliveryAddress,
         deliveryNotes: booking.deliveryNotes ?? undefined,
         wheelchairName: booking.wheelchair.name,
@@ -380,6 +389,7 @@ export class PaymentService {
         totalAmount: invoice.totalAmount,
         paymentMethod: "ONLINE",
         paymentStatus: "PAID",
+        supportPhone: getOptionalEnv("SUPPORT_PHONE"),
         invoiceNumber: invoice.invoiceNumber,
         invoiceUrl: invoice.invoiceDownloadUrl ?? invoice.invoiceUrl,
         invoiceFilename: invoice.invoiceFilename,
@@ -501,7 +511,7 @@ export class PaymentService {
           update: {
             stripePaymentIntentId:
               booking.payment?.stripePaymentIntentId ?? `cash_${bookingId}`,
-            amount: booking.totalPrice,
+            amount: this.getBookingPricingSnapshot(booking).total,
             currency: booking.payment?.currency ?? CURRENCY,
             status: "SUCCEEDED",
             paidAt: new Date(),
@@ -514,7 +524,7 @@ export class PaymentService {
           create: {
             bookingId,
             stripePaymentIntentId: `cash_${bookingId}`,
-            amount: booking.totalPrice,
+            amount: this.getBookingPricingSnapshot(booking).total,
             currency: CURRENCY,
             status: "SUCCEEDED",
             paidAt: new Date(),
@@ -532,7 +542,7 @@ export class PaymentService {
       booking.user.id,
       booking.payment?.amount
         ? Number(booking.payment.amount)
-        : this.getBookingPricingSnapshot(booking).totalAmount,
+        : this.getBookingPricingSnapshot(booking).total,
     );
 
     try {
@@ -541,6 +551,8 @@ export class PaymentService {
         customerEmail: booking.user.email,
         customerName: booking.user.name,
         phoneNumber: booking.phoneNumber,
+        deliveryCity: booking.deliveryCity,
+        deliveryWindow: booking.deliveryWindow,
         deliveryAddress: booking.deliveryAddress,
         deliveryNotes: booking.deliveryNotes ?? undefined,
         wheelchairName: booking.wheelchair.name,
@@ -549,6 +561,7 @@ export class PaymentService {
         totalAmount: invoice.totalAmount,
         paymentMethod: "CASH",
         paymentStatus: "PAID",
+        supportPhone: getOptionalEnv("SUPPORT_PHONE"),
         invoiceNumber: invoice.invoiceNumber,
         invoiceUrl: invoice.invoiceDownloadUrl ?? invoice.invoiceUrl,
         invoiceFilename: invoice.invoiceFilename,
@@ -671,6 +684,8 @@ export class PaymentService {
     customerEmail,
     customerName,
     phoneNumber,
+    deliveryCity,
+    deliveryWindow,
     deliveryAddress,
     wheelchairName,
     startDate,
@@ -678,6 +693,7 @@ export class PaymentService {
     totalAmount,
     paymentMethod,
     paymentStatus,
+    supportPhone,
     invoiceNumber,
     invoiceUrl,
     invoiceFilename,
@@ -687,6 +703,8 @@ export class PaymentService {
     customerEmail: string;
     customerName: string;
     phoneNumber: string;
+    deliveryCity: string;
+    deliveryWindow: string;
     deliveryAddress: string;
     deliveryNotes?: string;
     wheelchairName: string;
@@ -695,6 +713,7 @@ export class PaymentService {
     totalAmount: number;
     paymentMethod: "ONLINE" | "CASH";
     paymentStatus: "PENDING" | "PAID";
+    supportPhone?: string;
     invoiceNumber?: string;
     invoiceUrl?: string | null;
     invoiceFilename?: string;
@@ -716,6 +735,8 @@ export class PaymentService {
         to: customerEmail,
         customerName,
         phoneNumber,
+        deliveryCity,
+        deliveryWindow,
         deliveryAddress,
         wheelchairName,
         startDate,
@@ -727,6 +748,7 @@ export class PaymentService {
         invoiceUrl,
         invoiceFilename,
         invoiceAttachmentUrl,
+        supportPhone,
       });
       await this.markPaymentEmailMetadata(bookingId, {
         paymentConfirmationSentAt: sentAt,
@@ -740,6 +762,8 @@ export class PaymentService {
         customerName,
         customerEmail,
         phoneNumber,
+        deliveryCity,
+        deliveryWindow,
         deliveryAddress,
         wheelchairName,
         startDate,
@@ -751,6 +775,7 @@ export class PaymentService {
         invoiceUrl,
         invoiceFilename,
         invoiceAttachmentUrl,
+        supportPhone,
       });
       await this.markPaymentEmailMetadata(bookingId, {
         paymentConfirmationAdminSentAt: new Date().toISOString(),

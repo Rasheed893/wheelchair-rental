@@ -24,6 +24,8 @@ import {
   getReservationExpiryDate,
   getReservationBlockingWhere,
 } from "@/lib/booking-reservation";
+import { getDeliveryFee } from "@/lib/delivery";
+import { calculateBookingPricing } from "@/lib/pricing";
 
 export class BookingService {
   async expirePendingBookings(): Promise<number> {
@@ -93,11 +95,13 @@ export class BookingService {
       );
     }
 
-    const { days, totalPrice } = await wheelchairService.calculatePrice(
+    const { days, pricePerDay } = await wheelchairService.calculatePrice(
       wheelchairId,
       startDate,
       endDate,
     );
+    const deliveryFee = getDeliveryFee(input.deliveryCity);
+    const pricing = calculateBookingPricing(days, pricePerDay, deliveryFee);
 
     const booking = await prisma.booking.create({
       data: {
@@ -106,11 +110,14 @@ export class BookingService {
         startDate,
         endDate,
         totalDays: days,
-        totalPrice,
+        totalPrice: pricing.total,
         status: input.paymentMethod === "CASH" ? "CONFIRMED" : "PENDING",
         phoneNumber: input.phoneNumber,
+        deliveryCity: input.deliveryCity,
+        deliveryWindow: input.deliveryWindow,
         deliveryAddress: input.deliveryAddress,
         deliveryNotes: input.deliveryNotes,
+        deliveryFee,
         paymentMethod: input.paymentMethod,
         paymentStatus: "PENDING",
         reservationExpiresAt:
@@ -148,12 +155,15 @@ export class BookingService {
           to: booking.user.email,
           customerName: booking.user.name,
           phoneNumber: booking.phoneNumber,
+          deliveryCity: booking.deliveryCity,
+          deliveryWindow: booking.deliveryWindow,
           deliveryAddress: booking.deliveryAddress,
           deliveryNotes: booking.deliveryNotes ?? undefined,
           wheelchairName: booking.wheelchair.name,
           startDate: booking.startDate,
           endDate: booking.endDate,
-          subtotal: Number(booking.totalPrice),
+          subtotal: pricing.subtotal,
+          deliveryFee: pricing.deliveryFee,
           bookingId: booking.id,
           paymentMethod: "CASH",
           paymentStatus: "PENDING",
@@ -170,12 +180,15 @@ export class BookingService {
           to: booking.user.email,
           customerName: booking.user.name,
           phoneNumber: booking.phoneNumber,
+          deliveryCity: booking.deliveryCity,
+          deliveryWindow: booking.deliveryWindow,
           deliveryAddress: booking.deliveryAddress,
           deliveryNotes: booking.deliveryNotes ?? undefined,
           wheelchairName: booking.wheelchair.name,
           startDate: booking.startDate,
           endDate: booking.endDate,
-          subtotal: Number(booking.totalPrice),
+          subtotal: pricing.subtotal,
+          deliveryFee: pricing.deliveryFee,
           bookingId: booking.id,
           paymentMethod: "CASH",
           paymentStatus: "PENDING",

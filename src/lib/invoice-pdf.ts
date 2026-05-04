@@ -10,12 +10,15 @@ type InvoicePdfData = {
   bookingId: string;
   customerName: string;
   phoneNumber: string;
+  deliveryCity: string;
+  deliveryWindow: string;
   deliveryAddress: string;
   deliveryNotes?: string;
   wheelchairName: string;
   startDate: Date;
   endDate: Date;
   subtotal: number;
+  deliveryFee: number;
   taxRate: number;
   taxAmount: number;
   totalAmount: number;
@@ -281,6 +284,10 @@ export async function buildInvoicePdf(
   y -= 20;
   y -= (drawRow(y, "Phone", data.phoneNumber) - 1) * 13;
   y -= 20;
+  y -= (drawRow(y, "Delivery city", data.deliveryCity) - 1) * 13;
+  y -= 20;
+  y -= (drawRow(y, "Delivery window", data.deliveryWindow) - 1) * 13;
+  y -= 20;
   y -=
     (drawRow(y, "Address", formatInvoiceAddress(data.deliveryAddress)) - 1) *
     13;
@@ -329,42 +336,55 @@ export async function buildInvoicePdf(
     color: rgb(0.07, 0.11, 0.17),
   });
 
-  drawText(`VAT (${(data.taxRate * 100).toFixed(0)}%)`, {
+  drawText("Delivery fee", {
     x: 72,
     y: y - 42,
     size: 11,
     color: rgb(0.07, 0.11, 0.17),
   });
-  drawText(formatMoney(data.taxAmount, data.currency), {
+  drawText(formatMoney(data.deliveryFee, data.currency), {
     x: amountX,
     y: y - 42,
     size: 11,
     color: rgb(0.07, 0.11, 0.17),
   });
 
+  drawText(`VAT (${(data.taxRate * 100).toFixed(0)}%)`, {
+    x: 72,
+    y: y - 68,
+    size: 11,
+    color: rgb(0.07, 0.11, 0.17),
+  });
+  drawText(formatMoney(data.taxAmount, data.currency), {
+    x: amountX,
+    y: y - 68,
+    size: 11,
+    color: rgb(0.07, 0.11, 0.17),
+  });
+
   page.drawLine({
-    start: { x: 72, y: y - 56 },
-    end: { x: PAGE_WIDTH - 72, y: y - 56 },
+    start: { x: 72, y: y - 82 },
+    end: { x: PAGE_WIDTH - 72, y: y - 82 },
     color: rgb(0.9, 0.92, 0.95),
     thickness: 1,
   });
 
   drawText("Total", {
     x: 72,
-    y: y - 78,
+    y: y - 104,
     size: 12,
     color: rgb(0.06, 0.36, 0.55),
     bold: true,
   });
   drawText(formatMoney(data.totalAmount, data.currency), {
     x: amountX,
-    y: y - 78,
+    y: y - 104,
     size: 12,
     color: rgb(0.06, 0.36, 0.55),
     bold: true,
   });
 
-  const statusY = y - 132;
+  const statusY = y - 158;
   drawText("Payment status", {
     x: 56,
     y: statusY,

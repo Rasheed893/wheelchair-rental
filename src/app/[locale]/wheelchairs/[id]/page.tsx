@@ -354,8 +354,8 @@ export default async function WheelchairDetailPage({ params }: Props) {
                 <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
                   🚚{" "}
                   {isAr
-                    ? "السعر يشمل التوصيل والاستلام"
-                    : "Price includes delivery & pickup"}
+                    ? "السعر يشمل التوصيل والاستلام في عجمان، الشارقة، دبي، وأم القيوين"
+                    : "Free delivery & Pickup to AJM, SHJ, DXB, UAQ"}
                 </span>
               </div>
 

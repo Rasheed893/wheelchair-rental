@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DELIVERY_CITIES, DELIVERY_WINDOWS } from "@/lib/delivery";
 
 const dateString = z
   .string()
@@ -12,6 +13,12 @@ export const createBookingSchema = z
     endDate: dateString,
     fullName: z.string().trim().min(2, "Full name is required").max(120),
     phoneNumber: z.string().trim().min(7, "Phone number is required").max(30),
+    deliveryCity: z.enum(DELIVERY_CITIES, {
+      message: "Delivery city is required",
+    }),
+    deliveryWindow: z.enum(DELIVERY_WINDOWS, {
+      message: "Delivery window is required",
+    }),
     deliveryAddress: z
       .string()
       .trim()

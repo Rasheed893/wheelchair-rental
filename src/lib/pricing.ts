@@ -8,8 +8,14 @@ export function calculateTax(subtotal: number, taxRate = VAT_RATE): number {
   return roundCurrency(subtotal * taxRate);
 }
 
-export function calculateTotal(subtotal: number, taxRate = VAT_RATE): number {
-  return roundCurrency(subtotal + calculateTax(subtotal, taxRate));
+export function calculateTotal(
+  subtotal: number,
+  deliveryFee = 0,
+  taxRate = VAT_RATE,
+): number {
+  return roundCurrency(
+    subtotal + deliveryFee + calculateTax(subtotal + deliveryFee, taxRate),
+  );
 }
 
 export function calculateBookingSubtotal(
@@ -22,15 +28,19 @@ export function calculateBookingSubtotal(
 export function calculateBookingPricing(
   totalDays: number,
   pricePerDay: number,
-  taxRate = VAT_RATE,
+  deliveryFee = 0,
 ) {
   const subtotal = calculateBookingSubtotal(totalDays, pricePerDay);
-  const taxAmount = calculateTax(subtotal, taxRate);
-  const totalAmount = calculateTotal(subtotal, taxRate);
+  const normalizedDeliveryFee = roundCurrency(deliveryFee);
+  const tax = calculateTax(subtotal + normalizedDeliveryFee, VAT_RATE);
+  const total = calculateTotal(subtotal, normalizedDeliveryFee, VAT_RATE);
 
   return {
     subtotal,
-    taxAmount,
-    totalAmount,
+    deliveryFee: normalizedDeliveryFee,
+    tax,
+    total,
+    taxAmount: tax,
+    totalAmount: total,
   };
 }

@@ -1,13 +1,16 @@
-// src/app/[locale]/dashboard/bookings/[id]/page.tsx
 "use client";
 
-import { use, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { format } from "date-fns";
-import type { BookingWithRelations } from "@/types";
+import Link from "next/link";
+import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { formatAED } from "@/lib/currency";
-import { VAT_RATE, calculateBookingPricing } from "@/lib/pricing";
+import {
+  formatDeliveryCity,
+  formatDeliveryWindow,
+} from "@/lib/delivery";
+import { calculateBookingPricing } from "@/lib/pricing";
+import type { BookingWithRelations } from "@/types";
 
 interface Props {
   params: Promise<{ locale: string; id: string }>;
@@ -31,6 +34,8 @@ const STATUS_BADGE: Record<string, string> = {
   CANCELLED: "badge-red",
   COMPLETED: "badge-blue",
   EXPIRED: "badge-gray",
+  OUT_FOR_DELIVERY: "badge-blue",
+  DELIVERED: "badge-blue",
 };
 
 const PAY_STATUS: Record<string, string> = {
@@ -41,9 +46,7 @@ const PAY_STATUS: Record<string, string> = {
 
 export default function BookingDetailPage({ params }: Props) {
   const { locale, id } = use(params);
-  const isAr = locale === "ar";
   const router = useRouter();
-
   const [booking, setBooking] = useState<BookingWithRelations | null>(null);
   const [invoice, setInvoice] = useState<BookingInvoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,29 +57,30 @@ export default function BookingDetailPage({ params }: Props) {
     Promise.all([
       fetch(`/api/bookings/${id}`).then((r) => r.json()),
       fetch(`/api/bookings/${id}/invoice`).then((r) => r.json()),
-    ]).then(([bookingData, invoiceData]) => {
-      if (bookingData.success) setBooking(bookingData.data);
-      if (invoiceData.success) setInvoice(invoiceData.data);
-      setLoading(false);
-    });
-  }, [id]);
-
-  useEffect(() => {
-    fetch("/api/config/support-phone")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success && typeof data.data?.supportPhone === "string") {
-          setSupportPhone(data.data.supportPhone);
+      fetch("/api/config/support-phone").then((r) => r.json()),
+    ])
+      .then(([bookingData, invoiceData, supportData]) => {
+        if (bookingData.success) {
+          setBooking(bookingData.data);
+        }
+        if (invoiceData.success) {
+          setInvoice(invoiceData.data);
+        }
+        if (
+          supportData.success &&
+          typeof supportData.data?.supportPhone === "string"
+        ) {
+          setSupportPhone(supportData.data.supportPhone);
         }
       })
-      .catch(() => {
-        setSupportPhone("");
-      });
-  }, []);
+      .finally(() => setLoading(false));
+  }, [id]);
 
   async function handleCancel() {
-    if (!confirm(isAr ? "هل أنت متأكد؟" : "Are you sure you want to cancel?"))
+    if (!confirm("Are you sure you want to cancel this booking?")) {
       return;
+    }
+
     setCancelling(true);
     await fetch(`/api/bookings/${id}`, {
       method: "PATCH",
@@ -88,12 +92,12 @@ export default function BookingDetailPage({ params }: Props) {
 
   if (loading) {
     return (
-      <div className="page-container py-10 max-w-3xl mx-auto">
+      <div className="page-container mx-auto max-w-4xl py-10">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-slate-100 rounded w-1/3" />
-          <div className="card p-6 space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-4 bg-slate-100 rounded" />
+          <div className="h-8 w-1/3 rounded bg-slate-100" />
+          <div className="card space-y-3 p-6">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="h-4 rounded bg-slate-100" />
             ))}
           </div>
         </div>
@@ -104,19 +108,17 @@ export default function BookingDetailPage({ params }: Props) {
   if (!booking) {
     return (
       <div className="page-container py-16 text-center text-slate-400">
-        <p>{isAr ? "الحجز غير موجود" : "Booking not found"}</p>
+        <p>Booking not found</p>
         <Link
           href={`/${locale}/dashboard`}
           className="btn-primary mt-4 inline-flex"
         >
-          {isAr ? "العودة" : "Go Back"}
+          Go Back
         </Link>
       </div>
     );
   }
 
-  const name = isAr ? booking.wheelchair.nameAr : booking.wheelchair.name;
-  const canCancel = ["PENDING", "CONFIRMED"].includes(booking.status);
   const reservationExpired =
     booking.paymentMethod === "ONLINE" &&
     booking.paymentStatus === "PENDING" &&
@@ -131,22 +133,19 @@ export default function BookingDetailPage({ params }: Props) {
     booking.paymentMethod === "ONLINE" &&
     booking.paymentStatus === "PENDING" &&
     !isExpired;
-  const { subtotal, taxAmount, totalAmount } = calculateBookingPricing(
+  const canCancel = ["PENDING", "CONFIRMED"].includes(booking.status);
+  const pricing = calculateBookingPricing(
     booking.totalDays,
     Number(booking.wheelchair.pricePerDay),
-    VAT_RATE,
+    Number(booking.deliveryFee),
   );
 
   return (
     <div className="page-container py-10">
-      <div className="max-w-3xl mx-auto">
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-sm text-slate-400 mb-6">
-          <Link
-            href={`/${locale}/dashboard`}
-            className="hover:text-primary-600"
-          >
-            {isAr ? "حجوزاتي" : "My Bookings"}
+      <div className="mx-auto max-w-5xl">
+        <nav className="mb-6 flex items-center gap-2 text-sm text-slate-400">
+          <Link href={`/${locale}/dashboard`} className="hover:text-primary-600">
+            My Bookings
           </Link>
           <span>/</span>
           <span className="text-slate-600">
@@ -154,193 +153,97 @@ export default function BookingDetailPage({ params }: Props) {
           </span>
         </nav>
 
-        {/* Status banner */}
         {isPending && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">⏳</span>
-              <div>
-                <p className="font-semibold text-amber-900 text-sm">
-                  {isAr ? "في انتظار الدفع" : "Payment Pending"}
-                </p>
-                <p className="text-amber-700 text-xs">
-                  {isAr
-                    ? "أكمل عملية الدفع لتأكيد حجزك"
-                    : "Complete payment to confirm your booking"}
-                </p>
-              </div>
+          <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                Payment Pending
+              </p>
+              <p className="text-xs text-amber-700">
+                Complete payment to confirm your booking.
+              </p>
             </div>
             <Link
               href={`/${locale}/wheelchairs/${booking.wheelchairId}/book?bookingId=${booking.id}`}
-              className="btn-primary py-2 px-4 text-sm shrink-0"
+              className="btn-primary shrink-0 px-4 py-2 text-sm"
             >
-              {isAr ? "أكمل الدفع" : "Pay Now"}
+              Pay Now
             </Link>
           </div>
         )}
 
-        {isExpired && (
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 flex items-center justify-between gap-4">
-            <div>
-              <p className="font-semibold text-slate-900 text-sm">
-                {isAr ? "انتهى الحجز" : "Booking expired"}
-              </p>
-              <p className="text-slate-600 text-xs">
-                {isAr
-                  ? "لم يكتمل الدفع خلال مدة الحجز."
-                  : "The reservation window ended before payment was completed."}
-              </p>
-            </div>
-            <Link
-              href={`/${locale}/wheelchairs/${booking.wheelchairId}/book`}
-              className="btn-outline py-2 px-4 text-sm shrink-0"
-            >
-              {isAr ? "إعادة الحجز" : "Rebook"}
-            </Link>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Main details */}
-          <div className="md:col-span-2 space-y-5">
-            {/* Booking card */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
             <div className="card p-6">
-              <div className="flex items-start justify-between mb-4">
+              <div className="mb-4 flex items-start justify-between">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={STATUS_BADGE[booking.status]}>
-                      {booking.status}
-                    </span>
-                  </div>
-                  <h1
-                    className="text-xl font-bold text-slate-900"
-                    style={{ fontFamily: "var(--font-sora)" }}
-                  >
-                    {name}
+                  <span className={STATUS_BADGE[booking.status]}>
+                    {booking.status}
+                  </span>
+                  <h1 className="mt-2 text-xl font-bold text-slate-900">
+                    {locale === "ar"
+                      ? booking.wheelchair.nameAr
+                      : booking.wheelchair.name}
                   </h1>
-                  <p className="text-slate-400 text-xs mt-1">
-                    {isAr ? "رقم الحجز: " : "Booking ID: "}
-                    <span className="font-mono">
-                      #{booking.id.slice(-8).toUpperCase()}
-                    </span>
-                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 rounded-xl p-4">
+              <div className="grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4">
                 <div>
-                  <p className="text-xs text-slate-400 mb-1">
-                    {isAr ? "تاريخ البداية" : "Start Date"}
-                  </p>
-                  <p className="font-semibold text-slate-900 text-sm">
+                  <p className="mb-1 text-xs text-slate-400">Start Date</p>
+                  <p className="text-sm font-semibold text-slate-900">
                     {format(new Date(booking.startDate), "EEEE, MMM d, yyyy")}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400 mb-1">
-                    {isAr ? "تاريخ النهاية" : "End Date"}
-                  </p>
-                  <p className="font-semibold text-slate-900 text-sm">
+                  <p className="mb-1 text-xs text-slate-400">End Date</p>
+                  <p className="text-sm font-semibold text-slate-900">
                     {format(new Date(booking.endDate), "EEEE, MMM d, yyyy")}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400 mb-1">
-                    {isAr ? "المدة" : "Duration"}
-                  </p>
-                  <p className="font-semibold text-slate-900 text-sm">
-                    {booking.totalDays}{" "}
-                    {isAr ? "يوم" : booking.totalDays === 1 ? "day" : "days"}
+                  <p className="mb-1 text-xs text-slate-400">Duration</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {booking.totalDays} {booking.totalDays === 1 ? "day" : "days"}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400 mb-1">
-                    {isAr ? "السعر اليومي" : "Daily Rate"}
-                  </p>
-                  <p className="font-semibold text-slate-900 text-sm">
-                    {formatAED(Number(booking.wheelchair.pricePerDay))}/
-                    {isAr ? "يوم" : "day"}
+                  <p className="mb-1 text-xs text-slate-400">Daily Rate</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {formatAED(Number(booking.wheelchair.pricePerDay))}/day
                   </p>
                 </div>
               </div>
 
-              {booking.deliveryNotes && (
-                <div className="mt-4 p-3 bg-blue-50 rounded-xl">
-                  <p className="text-xs text-blue-600 font-medium mb-1">
-                    {isAr ? "ملاحظات التوصيل" : "Delivery Notes"}
-                  </p>
-                  <p className="text-sm text-blue-800">
-                    {booking.deliveryNotes}
-                  </p>
-                </div>
-              )}
-
-              <div className="mt-3 p-3 bg-slate-50 rounded-xl">
-                <p className="text-xs text-slate-500 font-medium mb-1">
-                  📞 {isAr ? "الهاتف" : "Phone"}
-                </p>
-                <p className="text-sm text-slate-700">{booking.phoneNumber}</p>
-                <p className="mt-3 text-xs text-slate-500 font-medium mb-1">
-                  📍 {isAr ? "عنوان التوصيل" : "Delivery Address"}
-                </p>
-                <p className="text-sm text-slate-700">
-                  {booking.deliveryAddress}
-                </p>
+              <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
+                <p className="font-medium text-slate-900">Delivery</p>
+                <p className="mt-2">Phone: {booking.phoneNumber}</p>
+                <p>City: {formatDeliveryCity(booking.deliveryCity)}</p>
+                <p>Window: {formatDeliveryWindow(booking.deliveryWindow)}</p>
+                <p className="whitespace-pre-line">{booking.deliveryAddress}</p>
+                {booking.deliveryNotes ? (
+                  <p className="mt-2">Notes: {booking.deliveryNotes}</p>
+                ) : null}
               </div>
 
-              {booking.cancelledAt && (
-                <div className="mt-4 p-3 bg-red-50 rounded-xl">
-                  <p className="text-xs text-red-600 font-medium mb-1">
-                    {isAr ? "سبب الإلغاء" : "Cancellation"}
-                  </p>
-                  <p className="text-sm text-red-800">
-                    {format(new Date(booking.cancelledAt), "MMM d, yyyy")}
-                    {booking.cancelReason && ` — ${booking.cancelReason}`}
-                  </p>
-                  {supportPhone && (
-                    <p className="text-sm text-red-800 mt-2">
-                      {isAr ? "للمساعدة اتصل على: " : "Need help? Call: "}
-                      <a
-                        className="underline font-semibold"
-                        href={`tel:${supportPhone}`}
-                      >
-                        {supportPhone}
-                      </a>
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Actions */}
-              {canCancel && (
-                <div className="mt-5 pt-4 border-t border-slate-100">
+              {canCancel ? (
+                <div className="mt-5 border-t border-slate-100 pt-4">
                   <button
                     onClick={handleCancel}
                     disabled={cancelling}
-                    className="btn-danger py-2 px-4 text-sm"
+                    className="btn-danger px-4 py-2 text-sm"
                   >
-                    {cancelling
-                      ? isAr
-                        ? "جاري الإلغاء..."
-                        : "Cancelling..."
-                      : isAr
-                        ? "إلغاء الحجز"
-                        : "Cancel Booking"}
+                    {cancelling ? "Cancelling..." : "Cancel Booking"}
                   </button>
                 </div>
-              )}
+              ) : null}
             </div>
 
-            {/* Payment info */}
             <div className="card p-6">
-              <h2 className="font-semibold text-slate-900 mb-4">
-                💳 {isAr ? "معلومات الدفع" : "Payment Info"}
-              </h2>
+              <h2 className="mb-4 font-semibold text-slate-900">Payment Info</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">
-                    {isAr ? "طريقة الدفع" : "Method"}
-                  </span>
+                  <span className="text-slate-500">Method</span>
                   <span>
                     {booking.paymentMethod === "CASH"
                       ? "Cash on Delivery"
@@ -348,199 +251,120 @@ export default function BookingDetailPage({ params }: Props) {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">
-                    {isAr ? "الحالة" : "Payment Status"}
-                  </span>
+                  <span className="text-slate-500">Payment Status</span>
                   <span className={PAY_STATUS[booking.paymentStatus]}>
-                    {booking.paymentStatus === "PAID"
-                      ? isAr
-                        ? "🟢 مدفوع"
-                        : "🟢 Paid"
-                      : booking.paymentStatus === "EXPIRED" || isExpired
-                        ? isAr
-                          ? "منتهي"
-                          : "Expired"
-                        : booking.paymentMethod === "CASH"
-                          ? isAr
-                            ? "🟡 معلق (الدفع عند الاستلام)"
-                            : "🟡 Pending (Cash on Delivery)"
-                          : isAr
-                            ? "🟡 بانتظار الدفع"
-                            : "🟡 Pending"}
+                    {booking.paymentStatus}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">
-                    {isAr ? "المبلغ الأساسي" : "Subtotal"}
-                  </span>
-                  <span className="font-semibold">{formatAED(subtotal)}</span>
+                  <span className="text-slate-500">Subtotal</span>
+                  <span>{formatAED(pricing.subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">
-                    {isAr
-                      ? `ضريبة (${(VAT_RATE * 100).toFixed(0)}%)`
-                      : `Tax (${(VAT_RATE * 100).toFixed(0)}%)`}
-                  </span>
-                  <span>{formatAED(taxAmount)}</span>
+                  <span className="text-slate-500">Delivery Fee</span>
+                  <span>{formatAED(pricing.deliveryFee)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">
-                    {isAr ? "الإجمالي" : "Total"}
-                  </span>
-                  <span className="font-semibold">
-                    {formatAED(totalAmount)}
-                  </span>
+                  <span className="text-slate-500">VAT (5%)</span>
+                  <span>{formatAED(pricing.tax)}</span>
                 </div>
-                {booking.paidAt && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">
-                      {isAr ? "تاريخ الدفع" : "Paid At"}
-                    </span>
-                    <span>
-                      {format(new Date(booking.paidAt), "MMM d, yyyy HH:mm")}
-                    </span>
-                  </div>
-                )}
-                {booking.payment?.stripePaymentIntentId && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">
-                      {isAr ? "مرجع Stripe" : "Stripe Ref"}
-                    </span>
-                    <span className="font-mono text-xs text-slate-400">
-                      {booking.payment.stripePaymentIntentId.slice(-12)}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between font-semibold">
+                  <span className="text-slate-500">Total</span>
+                  <span>{formatAED(pricing.total)}</span>
+                </div>
+                {supportPhone ? (
+                  <p className="pt-3 text-xs text-slate-500">
+                    Support:{" "}
+                    <a href={`tel:${supportPhone}`} className="underline">
+                      {supportPhone}
+                    </a>
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
 
-          {/* Sidebar: Invoice */}
-          <div className="space-y-5">
+          <div className="space-y-6">
             {invoice ? (
-              <div id="invoice" className="card p-5">
-                <h2 className="font-semibold text-slate-900 mb-4">
-                  🧾 {isAr ? "الفاتورة" : "Invoice"}
-                </h2>
+              <div className="card p-5">
+                <h2 className="mb-4 font-semibold text-slate-900">Invoice</h2>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">
-                      {isAr ? "رقم الفاتورة" : "Invoice #"}
-                    </span>
-                    <span className="font-mono font-semibold text-xs">
+                    <span className="text-slate-500">Invoice #</span>
+                    <span className="font-mono text-xs font-semibold">
                       {invoice.invoiceNumber}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">
-                      {isAr ? "المبلغ الأساسي" : "Subtotal"}
-                    </span>
+                    <span className="text-slate-500">Subtotal</span>
                     <span>{formatAED(Number(invoice.subtotal))}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">
-                      {isAr
-                        ? `ضريبة (${(Number(invoice.taxRate) * 100).toFixed(0)}%)`
-                        : `Tax (${(Number(invoice.taxRate) * 100).toFixed(0)}%)`}
-                    </span>
+                    <span className="text-slate-500">Delivery Fee</span>
+                    <span>{formatAED(Number(booking.deliveryFee))}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">VAT (5%)</span>
                     <span>{formatAED(Number(invoice.taxAmount))}</span>
                   </div>
-                  <hr className="border-slate-100 my-1" />
                   <div className="flex justify-between font-bold">
-                    <span>{isAr ? "الإجمالي" : "Total"}</span>
+                    <span>Total</span>
                     <span className="text-primary-700">
                       {formatAED(Number(invoice.totalAmount))}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">
-                      {isAr ? "طريقة الدفع" : "Payment Method"}
-                    </span>
-                    <span>
-                      {booking.paymentMethod === "CASH"
-                        ? "Cash on Delivery"
-                        : "Online (Stripe)"}
-                    </span>
+                    <span className="text-slate-500">Delivery city</span>
+                    <span>{formatDeliveryCity(booking.deliveryCity)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">
-                      {isAr ? "حالة الدفع" : "Payment Status"}
-                    </span>
-                    <span>
-                      {booking.paymentStatus === "PAID"
-                        ? "Paid"
-                        : booking.paymentStatus === "EXPIRED" || isExpired
-                          ? isAr
-                            ? "منتهي"
-                            : "Expired"
-                          : booking.paymentMethod === "CASH"
-                            ? "Unpaid (Cash on Delivery)"
-                            : "Pending"}
-                    </span>
+                    <span className="text-slate-500">Delivery window</span>
+                    <span>{formatDeliveryWindow(booking.deliveryWindow)}</span>
                   </div>
-                  <p className="text-xs text-slate-400 text-center pt-1">
-                    {isAr ? "صدرت في: " : "Issued: "}
-                    {format(new Date(invoice.issuedAt), "MMM d, yyyy")}
+                  <p className="pt-1 text-center text-xs text-slate-400">
+                    Issued: {format(new Date(invoice.issuedAt), "MMM d, yyyy")}
                   </p>
-                  {(invoice.pdfUrl || invoice.downloadUrl) && (
-                    <div className="pt-3 flex flex-col gap-2">
-                      {invoice.pdfUrl && (
-                        <a
-                          href={invoice.pdfUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn-outline w-full justify-center text-sm"
-                        >
-                          {isAr ? "Ø¹Ø±Ø¶ PDF" : "Open PDF"}
-                        </a>
-                      )}
-                      {invoice.downloadUrl && (
-                        <a
-                          href={invoice.downloadUrl}
-                          download={invoice.filename}
-                          className="btn-primary w-full justify-center text-sm"
-                        >
-                          {isAr
-                            ? "ØªØ­Ù…ÙŠÙ„ Ø§Ù„ÙØ§ØªÙˆØ±Ø©"
-                            : "Download Invoice"}
-                        </a>
-                      )}
-                    </div>
-                  )}
+                  {invoice.pdfUrl ? (
+                    <a
+                      href={invoice.pdfUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-outline w-full justify-center text-sm"
+                    >
+                      Open PDF
+                    </a>
+                  ) : null}
+                  {invoice.downloadUrl ? (
+                    <a
+                      href={invoice.downloadUrl}
+                      download={invoice.filename}
+                      className="btn-primary w-full justify-center text-sm"
+                    >
+                      Download Invoice
+                    </a>
+                  ) : null}
                 </div>
-              </div>
-            ) : booking.status === "CONFIRMED" ? (
-              <div className="card p-5 text-center text-slate-400 text-sm">
-                {isAr ? "جاري إنشاء الفاتورة..." : "Invoice generating..."}
               </div>
             ) : null}
 
-            {/* Booking meta */}
             <div className="card p-5">
-              <h3 className="font-semibold text-slate-900 mb-3 text-sm">
-                {isAr ? "معلومات إضافية" : "Details"}
+              <h3 className="mb-3 text-sm font-semibold text-slate-900">
+                Booking Details
               </h3>
               <div className="space-y-2 text-xs text-slate-500">
                 <div className="flex justify-between">
-                  <span>{isAr ? "تاريخ الإنشاء" : "Created"}</span>
-                  <span>
-                    {format(new Date(booking.createdAt), "MMM d, yyyy")}
-                  </span>
+                  <span>Created</span>
+                  <span>{format(new Date(booking.createdAt), "MMM d, yyyy")}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>{isAr ? "آخر تحديث" : "Updated"}</span>
-                  <span>
-                    {format(new Date(booking.updatedAt), "MMM d, yyyy")}
-                  </span>
+                  <span>Updated</span>
+                  <span>{format(new Date(booking.updatedAt), "MMM d, yyyy")}</span>
                 </div>
               </div>
             </div>
 
-            <Link
-              href={`/${locale}/dashboard`}
-              className="btn-outline w-full justify-center text-sm"
-            >
-              {isAr ? "← العودة للحجوزات" : "← Back to Bookings"}
+            <Link href={`/${locale}/dashboard`} className="btn-outline w-full justify-center">
+              Back to Dashboard
             </Link>
           </div>
         </div>

@@ -15,8 +15,17 @@ import { useRouter } from "next/navigation";
 import "react-day-picker/dist/style.css";
 import type { BookingWithRelations } from "@/types";
 import { formatAED } from "@/lib/currency";
-import { VAT_RATE, calculateBookingPricing } from "@/lib/pricing";
+import { calculateBookingPricing } from "@/lib/pricing";
 import { logger } from "@sentry/nextjs";
+import {
+  DELIVERY_CITIES,
+  DELIVERY_WINDOWS,
+  formatDeliveryCity,
+  formatDeliveryWindow,
+  FREE_DELIVERY_CITIES,
+  getDeliveryFee,
+  PAID_DELIVERY_CITIES,
+} from "@/lib/delivery";
 
 const stripePublishableKey =
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
@@ -115,6 +124,12 @@ export default function BookPage({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deliveryCity, setDeliveryCity] = useState<(typeof DELIVERY_CITIES)[number]>(
+    "DUBAI",
+  );
+  const [deliveryWindow, setDeliveryWindow] = useState<
+    (typeof DELIVERY_WINDOWS)[number]
+  >("MORNING");
 
   const days = useMemo(() => {
     if (!dateRange?.from || !dateRange?.to) {
@@ -127,10 +142,13 @@ export default function BookPage({
   const activeTotalDays = existingBooking?.totalDays ?? days;
   const activePricePerDay =
     existingBooking?.wheelchair?.pricePerDay ?? wheelchair?.pricePerDay ?? 0;
-  const { subtotal, taxAmount, totalAmount } = calculateBookingPricing(
+  const activeDeliveryFee = existingBooking
+    ? Number(existingBooking.deliveryFee)
+    : getDeliveryFee(deliveryCity);
+  const { subtotal, tax, total } = calculateBookingPricing(
     activeTotalDays,
     Number(activePricePerDay),
-    VAT_RATE,
+    activeDeliveryFee,
   );
 
   const initializePayment = useCallback(
@@ -220,6 +238,10 @@ export default function BookPage({
           if (data.success) {
             setExistingBooking(data.data);
             setBookingPaymentStatus(data.data.paymentStatus);
+            setDeliveryCity(data.data.deliveryCity);
+            setDeliveryWindow(data.data.deliveryWindow);
+            setDeliveryAddress(data.data.deliveryAddress);
+            setDeliveryNotes(data.data.deliveryNotes ?? "");
           }
         });
     }
@@ -278,6 +300,8 @@ export default function BookPage({
           endDate,
           fullName: customerName,
           phoneNumber,
+          deliveryCity,
+          deliveryWindow,
           deliveryAddress,
           deliveryNotes: deliveryNotes || undefined,
           paymentMethod,
@@ -362,15 +386,58 @@ export default function BookPage({
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                   />
+                  <select
+                    className="input"
+                    value={deliveryCity}
+                    onChange={(e) =>
+                      setDeliveryCity(
+                        e.target.value as (typeof DELIVERY_CITIES)[number],
+                      )
+                    }
+                  >
+                    <optgroup label="Free Delivery">
+                      {FREE_DELIVERY_CITIES.map((city) => (
+                        <option key={city} value={city}>
+                          {formatDeliveryCity(city)}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="+ AED 150 Delivery Fee">
+                      {PAID_DELIVERY_CITIES.map((city) => (
+                        <option key={city} value={city}>
+                          {formatDeliveryCity(city)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  <select
+                    className="input"
+                    value={deliveryWindow}
+                    onChange={(e) =>
+                      setDeliveryWindow(
+                        e.target.value as (typeof DELIVERY_WINDOWS)[number],
+                      )
+                    }
+                  >
+                    {DELIVERY_WINDOWS.map((window) => (
+                      <option key={window} value={window}>
+                        {formatDeliveryWindow(window)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500">
+                    Free delivery within Ajman, Sharjah, Dubai & UAQ.
+                    Additional fee applies for other emirates.
+                  </p>
                   <textarea
                     className="input min-h-24"
-                    placeholder="Delivery address"
+                    placeholder="Street / building / apartment"
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
                   />
                   <textarea
                     className="input min-h-20"
-                    placeholder="Delivery notes (optional)"
+                    placeholder="Floor / instructions (optional)"
                     value={deliveryNotes}
                     onChange={(e) => setDeliveryNotes(e.target.value)}
                   />
@@ -520,15 +587,33 @@ export default function BookPage({
                     <span>{formatAED(subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-xs text-slate-500">
-                    <span>Tax ({(VAT_RATE * 100).toFixed(0)}%)</span>
-                    <span>{formatAED(taxAmount)}</span>
+                    <span>Delivery Fee</span>
+                    <span>{formatAED(activeDeliveryFee)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>VAT (5%)</span>
+                    <span>{formatAED(tax)}</span>
                   </div>
                   <hr className="my-2 border-slate-100" />
                   <div className="flex justify-between text-base font-bold">
                     <span>Total</span>
                     <span className="text-primary-700">
-                      {formatAED(totalAmount)}
+                      {formatAED(total)}
                     </span>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+                    <p>
+                      Delivery city:{" "}
+                      <span className="font-medium text-slate-700">
+                        {formatDeliveryCity(deliveryCity)}
+                      </span>
+                    </p>
+                    <p className="mt-1">
+                      Delivery window:{" "}
+                      <span className="font-medium text-slate-700">
+                        {formatDeliveryWindow(deliveryWindow)}
+                      </span>
+                    </p>
                   </div>
                 </div>
               ) : existingBooking ? (
@@ -557,15 +642,33 @@ export default function BookPage({
                     <span>{formatAED(subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-xs text-slate-500">
-                    <span>Tax ({(VAT_RATE * 100).toFixed(0)}%)</span>
-                    <span>{formatAED(taxAmount)}</span>
+                    <span>Delivery Fee</span>
+                    <span>{formatAED(activeDeliveryFee)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>VAT (5%)</span>
+                    <span>{formatAED(tax)}</span>
                   </div>
                   <hr className="my-2 border-slate-100" />
                   <div className="flex justify-between text-base font-bold">
                     <span>Total</span>
                     <span className="text-primary-700">
-                      {formatAED(totalAmount)}
+                      {formatAED(total)}
                     </span>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+                    <p>
+                      Delivery city:{" "}
+                      <span className="font-medium text-slate-700">
+                        {formatDeliveryCity(existingBooking.deliveryCity)}
+                      </span>
+                    </p>
+                    <p className="mt-1">
+                      Delivery window:{" "}
+                      <span className="font-medium text-slate-700">
+                        {formatDeliveryWindow(existingBooking.deliveryWindow)}
+                      </span>
+                    </p>
                   </div>
                 </div>
               ) : (

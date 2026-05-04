@@ -2,19 +2,28 @@ import { logger } from "@sentry/nextjs";
 import { sendEmail } from "./resend-client";
 import { bookingConfirmationTemplate } from "./templates/booking-confirmation";
 import { paymentReceivedTemplate } from "./templates/payment-received";
-import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
+import { calculateBookingPricing, VAT_RATE } from "@/lib/pricing";
 import { formatAddressHtml } from "@/lib/invoice-format";
+import {
+  formatDeliveryCity,
+  formatDeliveryWindow,
+  type DeliveryCity,
+  type DeliveryWindow,
+} from "@/lib/delivery";
 
 type BookingEmailInput = {
   to: string;
   customerName: string;
   phoneNumber: string;
+  deliveryCity: string;
+  deliveryWindow: string;
   deliveryAddress: string;
   deliveryNotes?: string;
   wheelchairName: string;
   startDate: Date;
   endDate: Date;
   subtotal: number;
+  deliveryFee: number;
   bookingId: string;
   paymentMethod: "ONLINE" | "CASH";
   paymentStatus: "PENDING" | "PAID";
@@ -25,6 +34,8 @@ type PaymentConfirmationEmailInput = {
   customerName: string;
   customerEmail?: string;
   phoneNumber: string;
+  deliveryCity: string;
+  deliveryWindow: string;
   deliveryAddress: string;
   wheelchairName: string;
   startDate: Date;
@@ -36,6 +47,7 @@ type PaymentConfirmationEmailInput = {
   invoiceAttachmentUrl?: string | null;
   totalAmount: number;
   paymentMethod: "ONLINE" | "CASH";
+  supportPhone?: string;
 };
 
 async function buildInvoiceAttachment(
@@ -95,12 +107,15 @@ function maskEmail(value?: string | null) {
 function buildBookingEmailPayload({
   customerName,
   phoneNumber,
+  deliveryCity,
+  deliveryWindow,
   deliveryAddress,
   deliveryNotes,
   wheelchairName,
   startDate,
   endDate,
   subtotal,
+  deliveryFee,
   bookingId,
   paymentMethod,
   paymentStatus,
@@ -113,8 +128,7 @@ function buildBookingEmailPayload({
       timeZone: "Asia/Dubai",
     }).format(value);
 
-  const taxAmount = calculateTax(subtotal, VAT_RATE);
-  const totalAmount = calculateTotal(subtotal, VAT_RATE);
+  const pricing = calculateBookingPricing(1, subtotal, deliveryFee);
   const paymentStatusLabel =
     paymentStatus === "PAID" ? "Paid" : "Unpaid (Cash on Delivery)";
   const subjectPrefix =
@@ -125,15 +139,18 @@ function buildBookingEmailPayload({
     html: bookingConfirmationTemplate({
       customerName,
       phoneNumber,
+      deliveryCity: formatDeliveryCity(deliveryCity as DeliveryCity),
+      deliveryWindow: formatDeliveryWindow(deliveryWindow as DeliveryWindow),
       deliveryAddress,
       deliveryNotes,
       wheelchairName,
       startDate: formatDate(startDate),
       endDate: formatDate(endDate),
       subtotal: subtotal.toFixed(2),
+      deliveryFee: deliveryFee.toFixed(2),
       taxRate: `${(VAT_RATE * 100).toFixed(0)}%`,
-      taxAmount: taxAmount.toFixed(2),
-      totalAmount: totalAmount.toFixed(2),
+      taxAmount: pricing.tax.toFixed(2),
+      totalAmount: pricing.total.toFixed(2),
       bookingId,
       paymentMethod,
       paymentStatusLabel,
@@ -170,12 +187,15 @@ export async function sendAdminBookingNotificationEmail(
   const rest = {
     customerName: input.customerName,
     phoneNumber: input.phoneNumber,
+    deliveryCity: input.deliveryCity,
+    deliveryWindow: input.deliveryWindow,
     deliveryAddress: input.deliveryAddress,
     deliveryNotes: input.deliveryNotes,
     wheelchairName: input.wheelchairName,
     startDate: input.startDate,
     endDate: input.endDate,
     subtotal: input.subtotal,
+    deliveryFee: input.deliveryFee,
     bookingId: input.bookingId,
     paymentMethod: input.paymentMethod,
     paymentStatus: input.paymentStatus,
@@ -271,6 +291,9 @@ export async function sendCustomerPaymentConfirmationEmail(
     input.invoiceAttachmentUrl,
     input.invoiceFilename,
   );
+  const followUpMessage = input.supportPhone
+    ? `We've received your booking! Our team will confirm your delivery window within 2 hours. For urgent requests call: ${input.supportPhone}`
+    : "We've received your booking! Our team will confirm your delivery window within 2 hours.";
 
   await sendEmail({
     to: [input.to],
@@ -283,11 +306,14 @@ export async function sendCustomerPaymentConfirmationEmail(
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin:20px 0">
           <p style="margin:0 0 8px"><strong>Wheelchair:</strong> ${input.wheelchairName}</p>
           <p style="margin:0 0 8px"><strong>Rental dates:</strong> ${formatDate(input.startDate)} to ${formatDate(input.endDate)}</p>
+          <p style="margin:0 0 8px"><strong>Delivery city:</strong> ${formatDeliveryCity(input.deliveryCity as DeliveryCity)}</p>
+          <p style="margin:0 0 8px"><strong>Delivery window:</strong> ${formatDeliveryWindow(input.deliveryWindow as DeliveryWindow)}</p>
           <p style="margin:0 0 8px"><strong>Delivery address:</strong></p>
           <p style="margin:0 0 8px;white-space:pre-line;word-break:break-word">${formatAddressHtml(input.deliveryAddress)}</p>
           <p style="margin:0 0 8px"><strong>Phone:</strong> ${input.phoneNumber}</p>
           <p style="margin:0"><strong>Total paid:</strong> AED ${input.totalAmount.toFixed(2)}</p>
         </div>
+        <p>${followUpMessage}</p>
         ${
           input.invoiceNumber
             ? `<p><strong>Invoice number:</strong> ${input.invoiceNumber}</p>`
@@ -336,6 +362,8 @@ export async function sendAdminPaymentConfirmationEmail(
         <p><strong>Customer:</strong> ${input.customerName}</p>
         <p><strong>Email:</strong> ${input.customerEmail ?? "Not available"}</p>
         <p><strong>Phone:</strong> ${input.phoneNumber}</p>
+        <p><strong>Delivery city:</strong> ${formatDeliveryCity(input.deliveryCity as DeliveryCity)}</p>
+        <p><strong>Delivery window:</strong> ${formatDeliveryWindow(input.deliveryWindow as DeliveryWindow)}</p>
         <p><strong>Payment method:</strong> ${input.paymentMethod}</p>
         <p><strong>Payment status:</strong> PAID</p>
         <p><strong>Wheelchair:</strong> ${input.wheelchairName}</p>

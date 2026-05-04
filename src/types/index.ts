@@ -11,6 +11,7 @@ import type {
   WheelchairCategory,
   Role,
 } from "@prisma/client";
+import type { DeliveryCity, DeliveryWindow } from "@/lib/delivery";
 
 // ─────────────────────────────────────────────
 // Re-export Prisma enums for convenience
@@ -110,6 +111,8 @@ export interface BookingCreateInput {
   endDate: string;
   fullName: string;
   phoneNumber: string;
+  deliveryCity: DeliveryCity;
+  deliveryWindow: DeliveryWindow;
   deliveryAddress: string;
   deliveryNotes?: string;
   paymentMethod: "ONLINE" | "CASH";

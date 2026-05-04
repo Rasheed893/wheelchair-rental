@@ -62,6 +62,23 @@ enum WheelchairCategory {
   TRANSPORT
 }
 
+enum DeliveryCity {
+  DUBAI
+  SHARJAH
+  AJMAN
+  UAQ
+  ABU_DHABI
+  RAK
+  FUJAIRAH
+  AL_AIN
+}
+
+enum DeliveryWindow {
+  MORNING
+  AFTERNOON
+  EVENING
+}
+
 // ─────────────────────────────────────────────
 // USER
 // ─────────────────────────────────────────────
@@ -132,8 +149,11 @@ model Booking {
   totalPrice      Decimal       @db.Decimal(10, 2)
   status          BookingStatus @default(PENDING)
   phoneNumber     String
+  deliveryCity    DeliveryCity
+  deliveryWindow  DeliveryWindow
   deliveryAddress String
   deliveryNotes   String?
+  deliveryFee     Decimal       @db.Decimal(10, 2) @default(0)
   paymentMethod   PaymentMethod       @default(ONLINE)
   paymentStatus   BookingPaymentStatus @default(PENDING)
   reservationExpiresAt DateTime?
@@ -196,7 +216,7 @@ model Invoice {
   bookingId     String   @unique
   userId        String
   subtotal      Decimal  @db.Decimal(10, 2)
-  taxRate       Decimal  @db.Decimal(5, 4) @default(0.15) // 15% VAT
+  taxRate       Decimal  @db.Decimal(5, 4) @default(0.05) // 5% VAT
   taxAmount     Decimal  @db.Decimal(10, 2)
   totalAmount   Decimal  @db.Decimal(10, 2)
   currency      String   @default("usd")

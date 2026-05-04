@@ -14,8 +14,6 @@ import type { Invoice } from "@prisma/client";
 import {
   VAT_RATE,
   calculateBookingPricing,
-  calculateTax,
-  calculateTotal,
   roundCurrency,
 } from "@/lib/pricing";
 
@@ -63,7 +61,7 @@ export class InvoiceService {
         calculateBookingPricing(
           booking.totalDays,
           Number(booking.wheelchair.pricePerDay),
-          this.TAX_RATE,
+          Number(booking.deliveryFee),
         ).subtotal,
         booking.payment?.amount,
       ));
@@ -93,12 +91,15 @@ export class InvoiceService {
       bookingId: booking.id,
       customerName: booking.user.name,
       phoneNumber: booking.phoneNumber,
+      deliveryCity: booking.deliveryCity,
+      deliveryWindow: booking.deliveryWindow,
       deliveryAddress: booking.deliveryAddress,
       deliveryNotes: booking.deliveryNotes ?? undefined,
       wheelchairName: booking.wheelchair.name,
       startDate: booking.startDate,
       endDate: booking.endDate,
       subtotal: Number(invoice.subtotal),
+      deliveryFee: Number(booking.deliveryFee),
       taxRate: Number(invoice.taxRate),
       taxAmount: Number(invoice.taxAmount),
       totalAmount: Number(invoice.totalAmount),
@@ -209,15 +210,31 @@ export class InvoiceService {
     paymentAmount?: Prisma.Decimal | null,
     attempt = 0,
   ): Promise<Invoice> {
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        wheelchair: {
+          select: { pricePerDay: true },
+        },
+      },
+    });
+
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    const pricing = calculateBookingPricing(
+      booking.totalDays,
+      Number(booking.wheelchair.pricePerDay),
+      Number(booking.deliveryFee),
+    );
     const subtotal = roundCurrency(Number(bookingTotalPrice));
-    const expectedTaxAmount = calculateTax(subtotal, this.TAX_RATE);
-    const expectedTotalAmount = calculateTotal(subtotal, this.TAX_RATE);
+    const expectedTaxAmount = pricing.tax;
+    const expectedTotalAmount = pricing.total;
     const chargedTotal = paymentAmount
       ? roundCurrency(Number(paymentAmount))
       : expectedTotalAmount;
-    const taxAmount = roundCurrency(
-      Math.max(chargedTotal - subtotal, expectedTaxAmount),
-    );
+    const taxAmount = roundCurrency(expectedTaxAmount);
     const totalAmount = chargedTotal;
 
     try {
