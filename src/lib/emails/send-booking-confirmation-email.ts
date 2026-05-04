@@ -3,6 +3,7 @@ import { sendEmail } from "./resend-client";
 import { bookingConfirmationTemplate } from "./templates/booking-confirmation";
 import { paymentReceivedTemplate } from "./templates/payment-received";
 import { VAT_RATE, calculateTax, calculateTotal } from "@/lib/pricing";
+import { formatAddressHtml } from "@/lib/invoice-format";
 
 type BookingEmailInput = {
   to: string;
@@ -31,9 +32,49 @@ type PaymentConfirmationEmailInput = {
   bookingId: string;
   invoiceNumber?: string;
   invoiceUrl?: string | null;
+  invoiceFilename?: string;
+  invoiceAttachmentUrl?: string | null;
   totalAmount: number;
   paymentMethod: "ONLINE" | "CASH";
 };
+
+async function buildInvoiceAttachment(
+  invoiceAttachmentUrl?: string | null,
+  invoiceFilename?: string,
+) {
+  if (!invoiceAttachmentUrl || !invoiceFilename) {
+    return undefined;
+  }
+
+  try {
+    const response = await fetch(invoiceAttachmentUrl, {
+      headers: {
+        Accept: "application/pdf",
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      logger.error("[EMAIL] Failed to fetch invoice attachment", {
+        invoiceAttachmentUrl,
+        status: response.status,
+      });
+      return undefined;
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return {
+      filename: invoiceFilename,
+      content: buffer.toString("base64"),
+    };
+  } catch (error) {
+    logger.error("[EMAIL] Invoice attachment fetch error", {
+      invoiceAttachmentUrl,
+      error,
+    });
+    return undefined;
+  }
+}
 
 function maskEmail(value?: string | null) {
   const trimmed = value?.trim();
@@ -126,7 +167,19 @@ export async function sendBookingConfirmationEmail(input: BookingEmailInput) {
 export async function sendAdminBookingNotificationEmail(
   input: BookingEmailInput,
 ) {
-  const { to, ...rest } = input;
+  const rest = {
+    customerName: input.customerName,
+    phoneNumber: input.phoneNumber,
+    deliveryAddress: input.deliveryAddress,
+    deliveryNotes: input.deliveryNotes,
+    wheelchairName: input.wheelchairName,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    subtotal: input.subtotal,
+    bookingId: input.bookingId,
+    paymentMethod: input.paymentMethod,
+    paymentStatus: input.paymentStatus,
+  };
   const adminEmail = process.env.ADMIN_EMAIL?.trim();
 
   // console.log("[EMAIL] ADMIN_EMAIL resolved", {
@@ -214,6 +267,11 @@ export async function sendCustomerPaymentConfirmationEmail(
       timeZone: "Asia/Dubai",
     }).format(value);
 
+  const attachment = await buildInvoiceAttachment(
+    input.invoiceAttachmentUrl,
+    input.invoiceFilename,
+  );
+
   await sendEmail({
     to: [input.to],
     subject: `Payment received for booking ${input.bookingId}`,
@@ -225,7 +283,8 @@ export async function sendCustomerPaymentConfirmationEmail(
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin:20px 0">
           <p style="margin:0 0 8px"><strong>Wheelchair:</strong> ${input.wheelchairName}</p>
           <p style="margin:0 0 8px"><strong>Rental dates:</strong> ${formatDate(input.startDate)} to ${formatDate(input.endDate)}</p>
-          <p style="margin:0 0 8px"><strong>Delivery address:</strong> ${input.deliveryAddress}</p>
+          <p style="margin:0 0 8px"><strong>Delivery address:</strong></p>
+          <p style="margin:0 0 8px;white-space:pre-line;word-break:break-word">${formatAddressHtml(input.deliveryAddress)}</p>
           <p style="margin:0 0 8px"><strong>Phone:</strong> ${input.phoneNumber}</p>
           <p style="margin:0"><strong>Total paid:</strong> AED ${input.totalAmount.toFixed(2)}</p>
         </div>
@@ -236,12 +295,13 @@ export async function sendCustomerPaymentConfirmationEmail(
         }
         ${
           input.invoiceUrl
-            ? `<p><a href="${input.invoiceUrl}" style="display:inline-block;background:#0f766e;color:#ffffff;padding:10px 16px;border-radius:8px;text-decoration:none">Download your invoice PDF</a></p>`
+            ? `<p><a href="${input.invoiceUrl}" style="display:inline-block;background:#0f766e;color:#ffffff;padding:10px 16px;border-radius:8px;text-decoration:none">Download ${input.invoiceFilename ?? "invoice PDF"}</a></p>`
             : "<p>Your invoice is being prepared and will be available shortly.</p>"
         }
         <p>Thank you for choosing ${process.env.NEXT_PUBLIC_COMPANY_NAME || "BioMobility"}.</p>
       </div>
     `,
+    attachments: attachment ? [attachment] : undefined,
   });
 }
 
@@ -261,6 +321,11 @@ export async function sendAdminPaymentConfirmationEmail(
       timeZone: "Asia/Dubai",
     }).format(value);
 
+  const attachment = await buildInvoiceAttachment(
+    input.invoiceAttachmentUrl,
+    input.invoiceFilename,
+  );
+
   await sendEmail({
     to: [adminEmail],
     subject: `[ADMIN] Payment confirmed for booking ${input.bookingId}`,
@@ -275,15 +340,17 @@ export async function sendAdminPaymentConfirmationEmail(
         <p><strong>Payment status:</strong> PAID</p>
         <p><strong>Wheelchair:</strong> ${input.wheelchairName}</p>
         <p><strong>Rental dates:</strong> ${formatDate(input.startDate)} to ${formatDate(input.endDate)}</p>
+        <p style="white-space:pre-line;word-break:break-word"><strong>Delivery address:</strong><br />${formatAddressHtml(input.deliveryAddress)}</p>
         <p><strong>Total paid:</strong> AED ${input.totalAmount.toFixed(2)}</p>
         <p><strong>Invoice number:</strong> ${input.invoiceNumber ?? "Pending"}</p>
         <p><strong>Invoice link:</strong> ${
           input.invoiceUrl
-            ? `<a href="${input.invoiceUrl}">${input.invoiceUrl}</a>`
+            ? `<a href="${input.invoiceUrl}">${input.invoiceFilename ?? input.invoiceUrl}</a>`
             : "Not available"
         }</p>
       </div>
     `,
+    attachments: attachment ? [attachment] : undefined,
   });
 
   return { skipped: false as const };

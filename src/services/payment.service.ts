@@ -26,6 +26,9 @@ type EmailMetadata = {
 type InvoiceNotificationData = {
   invoiceNumber?: string;
   invoiceUrl?: string | null;
+  invoiceDownloadUrl?: string;
+  invoiceFilename?: string;
+  invoiceAttachmentUrl?: string | null;
   totalAmount: number;
 };
 
@@ -378,7 +381,9 @@ export class PaymentService {
         paymentMethod: "ONLINE",
         paymentStatus: "PAID",
         invoiceNumber: invoice.invoiceNumber,
-        invoiceUrl: invoice.invoiceUrl,
+        invoiceUrl: invoice.invoiceDownloadUrl ?? invoice.invoiceUrl,
+        invoiceFilename: invoice.invoiceFilename,
+        invoiceAttachmentUrl: invoice.invoiceUrl,
       });
     } catch (error) {
       logger.error("[EMAIL ERROR]", {
@@ -545,7 +550,9 @@ export class PaymentService {
         paymentMethod: "CASH",
         paymentStatus: "PAID",
         invoiceNumber: invoice.invoiceNumber,
-        invoiceUrl: invoice.invoiceUrl,
+        invoiceUrl: invoice.invoiceDownloadUrl ?? invoice.invoiceUrl,
+        invoiceFilename: invoice.invoiceFilename,
+        invoiceAttachmentUrl: invoice.invoiceUrl,
       });
     } catch (error) {
       logger.error("[EMAIL ERROR]", {
@@ -585,6 +592,9 @@ export class PaymentService {
       return {
         invoiceNumber: existingInvoice.invoiceNumber,
         invoiceUrl: existingInvoice.pdfUrl ?? null,
+        invoiceDownloadUrl: existingInvoice.downloadUrl,
+        invoiceFilename: existingInvoice.filename,
+        invoiceAttachmentUrl: existingInvoice.pdfUrl ?? null,
         totalAmount: Number(existingInvoice.totalAmount),
       };
     }
@@ -599,6 +609,9 @@ export class PaymentService {
       return {
         invoiceNumber: invoice.invoiceNumber,
         invoiceUrl: invoiceDetails?.pdfUrl ?? null,
+        invoiceDownloadUrl: invoiceDetails?.downloadUrl,
+        invoiceFilename: invoiceDetails?.filename,
+        invoiceAttachmentUrl: invoiceDetails?.pdfUrl ?? null,
         totalAmount: Number(invoice.totalAmount),
       };
     } catch (error) {
@@ -620,6 +633,9 @@ export class PaymentService {
       return {
         invoiceNumber: fallbackInvoice.invoiceNumber,
         invoiceUrl: fallbackInvoice.pdfUrl ?? null,
+        invoiceDownloadUrl: fallbackInvoice.downloadUrl,
+        invoiceFilename: fallbackInvoice.filename,
+        invoiceAttachmentUrl: fallbackInvoice.pdfUrl ?? null,
         totalAmount: Number(fallbackInvoice.totalAmount),
       };
     }
@@ -664,6 +680,8 @@ export class PaymentService {
     paymentStatus,
     invoiceNumber,
     invoiceUrl,
+    invoiceFilename,
+    invoiceAttachmentUrl,
   }: {
     bookingId: string;
     customerEmail: string;
@@ -679,6 +697,8 @@ export class PaymentService {
     paymentStatus: "PENDING" | "PAID";
     invoiceNumber?: string;
     invoiceUrl?: string | null;
+    invoiceFilename?: string;
+    invoiceAttachmentUrl?: string | null;
   }) {
     const payment = await prisma.payment.findUnique({
       where: { bookingId },
@@ -705,6 +725,8 @@ export class PaymentService {
         totalAmount,
         invoiceNumber,
         invoiceUrl,
+        invoiceFilename,
+        invoiceAttachmentUrl,
       });
       await this.markPaymentEmailMetadata(bookingId, {
         paymentConfirmationSentAt: sentAt,
@@ -727,6 +749,8 @@ export class PaymentService {
         totalAmount,
         invoiceNumber,
         invoiceUrl,
+        invoiceFilename,
+        invoiceAttachmentUrl,
       });
       await this.markPaymentEmailMetadata(bookingId, {
         paymentConfirmationAdminSentAt: new Date().toISOString(),

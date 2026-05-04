@@ -5,6 +5,10 @@ import cloudinary, {
   normalizeInvoicePublicId,
 } from "@/lib/cloudinary";
 import { buildInvoicePdf } from "@/lib/invoice-pdf";
+import {
+  buildAbsoluteInvoiceDownloadUrl,
+  formatInvoiceFilename,
+} from "@/lib/invoice-format";
 import { Prisma } from "@prisma/client";
 import type { Invoice } from "@prisma/client";
 import {
@@ -25,6 +29,7 @@ type InvoiceMetadata = {
 
 type InvoiceDownloadPayload = Invoice & {
   downloadUrl: string;
+  filename: string;
 };
 
 export class InvoiceService {
@@ -134,19 +139,28 @@ export class InvoiceService {
       pdfUrl: invoice.pdfUrl
         ? this.getInvoiceDeliveryUrl(invoice.pdfUrl)
         : invoice.pdfUrl,
-      downloadUrl: `/api/bookings/${bookingId}/invoice/download`,
+      downloadUrl: buildAbsoluteInvoiceDownloadUrl(
+        `/api/bookings/${bookingId}/invoice/download`,
+      ),
+      filename: formatInvoiceFilename(invoice.invoiceNumber, invoice.issuedAt),
     };
   }
 
   async getInvoiceDownloadData(
     bookingId: string,
     userId: string,
-  ): Promise<{ invoiceNumber: string; pdfUrl: string } | null> {
+  ): Promise<{
+    invoiceNumber: string;
+    pdfUrl: string;
+    filename: string;
+    downloadUrl: string;
+  } | null> {
     const invoice = await prisma.invoice.findFirst({
       where: { bookingId, userId },
       select: {
         invoiceNumber: true,
         pdfUrl: true,
+        issuedAt: true,
       },
     });
 
@@ -157,6 +171,10 @@ export class InvoiceService {
     return {
       invoiceNumber: invoice.invoiceNumber,
       pdfUrl: this.getInvoiceDeliveryUrl(invoice.pdfUrl),
+      filename: formatInvoiceFilename(invoice.invoiceNumber, invoice.issuedAt),
+      downloadUrl: buildAbsoluteInvoiceDownloadUrl(
+        `/api/bookings/${bookingId}/invoice/download`,
+      ),
     };
   }
 

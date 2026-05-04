@@ -37,7 +37,7 @@ export const GET = withCustomerAuth(async (_req, { params, user }) => {
     return new NextResponse(pdfBuffer, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${invoice.invoiceNumber}.pdf"`,
+        "Content-Disposition": `attachment; filename="${invoice.filename}"`,
         "Cache-Control": "private, no-store",
       },
     });

@@ -5,6 +5,7 @@ import BookingCard from "@/components/booking/BookingCard";
 import { useAuth } from "@/hooks/useAuth";
 import type { BookingWithRelations } from "@/types";
 import { formatAED } from "@/lib/currency";
+import { calculateBookingPricing } from "@/lib/pricing";
 
 export default function DashboardPage({
   params,
@@ -18,6 +19,17 @@ export default function DashboardPage({
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | "active" | "past">("all");
+  const totalSpent = bookings
+    .filter((booking) => booking.status === "CONFIRMED")
+    .reduce(
+      (sum, booking) =>
+        sum +
+        calculateBookingPricing(
+          booking.totalDays,
+          Number(booking.wheelchair.pricePerDay),
+        ).totalAmount,
+      0,
+    );
 
   const fetchBookings = useCallback(async () => {
     setLoadingBookings(true);
@@ -128,11 +140,7 @@ export default function DashboardPage({
           },
           {
             label: isAr ? "إجمالي الإنفاق" : "Total Spent",
-            value: formatAED(
-              bookings
-              .filter((booking) => booking.status === "CONFIRMED")
-              .reduce((sum, booking) => sum + Number(booking.totalPrice), 0),
-            ),
+            value: formatAED(totalSpent),
             color: "text-primary-600",
           },
         ].map((stat) => (

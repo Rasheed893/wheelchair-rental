@@ -5,6 +5,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import type { BookingWithRelations } from "@/types";
 import { formatAED } from "@/lib/currency";
+import { calculateBookingPricing } from "@/lib/pricing";
 
 interface Props {
   booking: BookingWithRelations;
@@ -39,6 +40,10 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
   const statusLabel =
     STATUS_LABEL[booking.status]?.[isAr ? "ar" : "en"] ?? booking.status;
   const canCancel = ["PENDING", "CONFIRMED"].includes(booking.status);
+  const { totalAmount } = calculateBookingPricing(
+    booking.totalDays,
+    Number(booking.wheelchair.pricePerDay),
+  );
   const paymentStatusLabel =
     booking.paymentStatus === "PAID"
       ? isAr
@@ -95,7 +100,7 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
         {/* Price */}
         <div className="text-right shrink-0">
           <div className="text-xl font-bold text-slate-900">
-            {formatAED(Number(booking.totalPrice))}
+            {formatAED(totalAmount)}
           </div>
           <div className="text-xs text-slate-400 mt-0.5">
             {isAr ? "إجمالي" : "total"}

@@ -3,9 +3,16 @@ import { format } from "date-fns";
 import Link from "next/link";
 import type { BookingWithRelations } from "@/types";
 import { formatAED } from "@/lib/currency";
+import { calculateBookingPricing } from "@/lib/pricing";
 
 interface Props {
-  bookings: BookingWithRelations[];
+  bookings: Array<
+    BookingWithRelations & {
+      user?: {
+        name?: string | null;
+      } | null;
+    }
+  >;
   locale: string;
   showUser?: boolean;
 }
@@ -33,6 +40,10 @@ export function RecentBookings({ bookings, locale, showUser = false }: Props) {
     <div className="divide-y divide-slate-50">
       {bookings.map((booking) => {
         const name = isAr ? booking.wheelchair.nameAr : booking.wheelchair.name;
+        const { totalAmount } = calculateBookingPricing(
+          booking.totalDays,
+          Number(booking.wheelchair.pricePerDay),
+        );
         return (
           <div
             key={booking.id}
@@ -49,7 +60,7 @@ export function RecentBookings({ bookings, locale, showUser = false }: Props) {
               </p>
               {showUser && (
                 <p className="text-slate-400 text-xs">
-                  {(booking as any).user?.name}
+                  {booking.user?.name}
                 </p>
               )}
               <p className="text-slate-400 text-xs">
@@ -60,7 +71,7 @@ export function RecentBookings({ bookings, locale, showUser = false }: Props) {
             </div>
             <div className="text-right shrink-0">
               <p className="font-bold text-slate-900 text-sm">
-                {formatAED(Number(booking.totalPrice))}
+                {formatAED(totalAmount)}
               </p>
               <Link
                 href={`/${locale}/dashboard/bookings/${booking.id}`}

@@ -22,6 +22,7 @@ type BookingInvoice = {
   issuedAt: string | Date;
   pdfUrl?: string | null;
   downloadUrl?: string;
+  filename?: string;
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -496,6 +497,7 @@ export default function BookingDetailPage({ params }: Props) {
                       {invoice.downloadUrl && (
                         <a
                           href={invoice.downloadUrl}
+                          download={invoice.filename}
                           className="btn-primary w-full justify-center text-sm"
                         >
                           {isAr

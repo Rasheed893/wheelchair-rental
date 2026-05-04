@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { formatInvoiceAddress } from "@/lib/invoice-format";
 
 type InvoicePdfData = {
   invoiceNumber: string;
@@ -113,6 +114,78 @@ export async function buildInvoicePdf(
     });
   };
 
+  const wrapText = (
+    value: string,
+    maxWidth: number,
+    size: number,
+    bold = false,
+  ) => {
+    const font = selectFont(value, bold);
+    const lines: string[] = [];
+    const paragraphs = value.split("\n");
+
+    for (const paragraph of paragraphs) {
+      const words = paragraph.split(/\s+/).filter(Boolean);
+      if (words.length === 0) {
+        lines.push("");
+        continue;
+      }
+
+      let currentLine = "";
+      for (const word of words) {
+        const candidate = currentLine ? `${currentLine} ${word}` : word;
+        if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+          currentLine = candidate;
+          continue;
+        }
+
+        if (currentLine) {
+          lines.push(currentLine);
+        }
+        currentLine = word;
+      }
+
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+    }
+
+    return lines;
+  };
+
+  const drawMultilineValue = (
+    value: string,
+    options: {
+      x: number;
+      y: number;
+      size: number;
+      color: ReturnType<typeof rgb>;
+      maxWidth: number;
+      lineHeight?: number;
+      bold?: boolean;
+    },
+  ) => {
+    const lines = wrapText(
+      value,
+      options.maxWidth,
+      options.size,
+      options.bold ?? false,
+    );
+    const lineHeight = options.lineHeight ?? options.size + 3;
+
+    lines.forEach((line, index) => {
+      drawText(line, {
+        x: options.x,
+        y: options.y - index * lineHeight,
+        size: options.size,
+        color: options.color,
+        bold: options.bold,
+      });
+    });
+
+    return lines.length;
+  };
+
   const drawRow = (y: number, label: string, value: string) => {
     drawText(label, {
       x: 56,
@@ -121,12 +194,16 @@ export async function buildInvoicePdf(
       color: rgb(0.22, 0.28, 0.36),
       bold: true,
     });
-    drawText(value, {
+    const lines = drawMultilineValue(value, {
       x: 180,
       y,
       size: 10,
       color: rgb(0.07, 0.11, 0.17),
+      maxWidth: 340,
+      lineHeight: 13,
     });
+
+    return lines;
   };
 
   page.drawRectangle({
@@ -198,23 +275,25 @@ export async function buildInvoicePdf(
   });
 
   let y = PAGE_HEIGHT - 198;
-  drawRow(y, "Booking ID", data.bookingId);
+  y -= (drawRow(y, "Booking ID", data.bookingId) - 1) * 13;
   y -= 20;
-  drawRow(y, "Customer", data.customerName);
+  y -= (drawRow(y, "Customer", data.customerName) - 1) * 13;
   y -= 20;
-  drawRow(y, "Phone", data.phoneNumber);
+  y -= (drawRow(y, "Phone", data.phoneNumber) - 1) * 13;
   y -= 20;
-  drawRow(y, "Address", data.deliveryAddress);
+  y -=
+    (drawRow(y, "Address", formatInvoiceAddress(data.deliveryAddress)) - 1) *
+    13;
   y -= 20;
   if (data.deliveryNotes?.trim()) {
-    drawRow(y, "Customer notes", data.deliveryNotes.trim());
+    y -= (drawRow(y, "Customer notes", data.deliveryNotes.trim()) - 1) * 13;
     y -= 20;
   }
-  drawRow(y, "Wheelchair", data.wheelchairName);
+  y -= (drawRow(y, "Wheelchair", data.wheelchairName) - 1) * 13;
   y -= 20;
-  drawRow(y, "Rental start", formatDate(data.startDate));
+  y -= (drawRow(y, "Rental start", formatDate(data.startDate)) - 1) * 13;
   y -= 20;
-  drawRow(y, "Rental end", formatDate(data.endDate));
+  y -= (drawRow(y, "Rental end", formatDate(data.endDate)) - 1) * 13;
   y -= 34;
 
   drawText("Charges", {

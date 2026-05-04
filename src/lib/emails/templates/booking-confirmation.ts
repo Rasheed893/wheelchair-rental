@@ -1,3 +1,5 @@
+import { formatAddressHtml } from "@/lib/invoice-format";
+
 export function bookingConfirmationTemplate({
   customerName,
   phoneNumber,
@@ -43,7 +45,7 @@ export function bookingConfirmationTemplate({
         <li><strong>Booking ID:</strong> ${bookingId}</li>
         <li><strong>Customer:</strong> ${customerName}</li>
         <li><strong>Phone:</strong> ${phoneNumber}</li>
-        <li><strong>Delivery address:</strong> ${deliveryAddress}</li>
+        <li><strong>Delivery address:</strong> <span style="white-space:pre-line;word-break:break-word">${formatAddressHtml(deliveryAddress)}</span></li>
         ${deliveryNotes ? `<li><strong>Delivery notes:</strong> ${deliveryNotes}</li>` : ""}
         <li><strong>Wheelchair:</strong> ${wheelchairName}</li>
         <li><strong>Start date:</strong> ${startDate}</li>
