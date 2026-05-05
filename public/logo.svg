@@ -1,0 +1,16 @@
+<svg width="220" height="48" viewBox="0 0 220 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon -->
+  <rect x="0" y="4" width="40" height="40" rx="10" fill="#0ea5e9"/>
+  <circle cx="22" cy="18" r="3" fill="white"/>
+  <path d="M18 20 C12 26, 20 32, 26 28" stroke="white" stroke-width="2" fill="none"/>
+  
+  <!-- Text -->
+  <text x="50" y="26" font-family="Inter, sans-serif" font-size="18" font-weight="600" fill="#0369a1">
+    BioMobility
+  </text>
+
+  <!-- Tagline -->
+  <text x="50" y="40" font-family="Inter, sans-serif" font-size="10" fill="#64748b">
+    Wheelchair and mobility solution
+  </text>
+</svg>

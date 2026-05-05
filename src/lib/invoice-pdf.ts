@@ -93,6 +93,14 @@ export async function buildInvoicePdf(
   const fontArabic = await pdf.embedFont(fontBytes.regular, { subset: true });
   const fontArabicBold = await pdf.embedFont(fontBytes.bold, { subset: true });
 
+  const logoBytes = await readFile(
+    path.join(process.cwd(), "public", "logo.png"),
+  );
+  const logoImage = await pdf.embedPng(logoBytes);
+
+  // Scale logo to fit nicely: max 56px tall, proportional width
+  const logoDims = logoImage.scaleToFit(120, 56);
+
   const selectFont = (value: string, bold = false) => {
     if (ARABIC_TEXT_PATTERN.test(value)) {
       return bold ? fontArabicBold : fontArabic;
@@ -209,6 +217,7 @@ export async function buildInvoicePdf(
     return lines;
   };
 
+  // ── Header background ──────────────────────────────────────────────────────
   page.drawRectangle({
     x: 0,
     y: PAGE_HEIGHT - 132,
@@ -217,37 +226,36 @@ export async function buildInvoicePdf(
     color: rgb(0.95, 0.97, 0.99),
   });
 
-  page.drawRectangle({
-    x: 56,
-    y: PAGE_HEIGHT - 98,
-    width: 52,
-    height: 52,
-    color: rgb(0.06, 0.36, 0.55),
-    borderColor: rgb(0.04, 0.28, 0.43),
-    borderWidth: 1,
-  });
-  drawText("WR", {
-    x: 67,
-    y: PAGE_HEIGHT - 80,
-    size: 19,
-    color: rgb(1, 1, 1),
-    bold: true,
+  // ── FIX 1: Logo — properly sized & vertically centred in header ────────────
+  // Header spans from PAGE_HEIGHT down to PAGE_HEIGHT-132, centre = PAGE_HEIGHT-66
+  const logoX = 40;
+  const logoY = PAGE_HEIGHT - 66 - logoDims.height / 2; // vertically centred
+  page.drawImage(logoImage, {
+    x: logoX,
+    y: logoY,
+    width: logoDims.width,
+    height: logoDims.height,
   });
 
+  // ── FIX 2: Company name — reads from env, NO hardcoded string ─────────────
+  // Position it to the right of however wide the logo is
+  const textStartX = logoX + logoDims.width + 10;
+
   drawText(companyName(), {
-    x: 122,
-    y: PAGE_HEIGHT - 66,
+    x: textStartX,
+    y: PAGE_HEIGHT - 60,
     size: 22,
     color: rgb(0.07, 0.11, 0.17),
     bold: true,
   });
   drawText(`VAT: ${companyVatNumber()}`, {
-    x: 122,
-    y: PAGE_HEIGHT - 88,
+    x: textStartX,
+    y: PAGE_HEIGHT - 82,
     size: 10,
     color: rgb(0.29, 0.33, 0.39),
   });
 
+  // ── Right side: INVOICE label + number + date ──────────────────────────────
   drawText("INVOICE", {
     x: 420,
     y: PAGE_HEIGHT - 62,
@@ -269,6 +277,7 @@ export async function buildInvoicePdf(
     color: rgb(0.29, 0.33, 0.39),
   });
 
+  // ── Booking details ────────────────────────────────────────────────────────
   drawText("Booking details", {
     x: 56,
     y: PAGE_HEIGHT - 170,
@@ -303,6 +312,7 @@ export async function buildInvoicePdf(
   y -= (drawRow(y, "Rental end", formatDate(data.endDate)) - 1) * 13;
   y -= 34;
 
+  // ── Charges ────────────────────────────────────────────────────────────────
   drawText("Charges", {
     x: 56,
     y,
@@ -312,17 +322,23 @@ export async function buildInvoicePdf(
   });
   y -= 18;
 
+  // FIX 3: Increased box height from 108 → 132 so the Total row sits inside.
+  // Row positions:  Subtotal @ -16,  Delivery fee @ -42,  VAT @ -68
+  // Divider line @ -86,  Total @ -108  → box needs at least 108+16=124px, use 132 for padding.
+  const CHARGES_BOX_HEIGHT = 132;
+
   page.drawRectangle({
     x: 56,
-    y: y - 92,
+    y: y - CHARGES_BOX_HEIGHT,
     width: PAGE_WIDTH - 112,
-    height: 108,
+    height: CHARGES_BOX_HEIGHT,
     borderColor: rgb(0.85, 0.89, 0.93),
     borderWidth: 1,
     color: rgb(1, 1, 1),
   });
 
   const amountX = 468;
+
   drawText("Subtotal", {
     x: 72,
     y: y - 16,
@@ -362,29 +378,32 @@ export async function buildInvoicePdf(
     color: rgb(0.07, 0.11, 0.17),
   });
 
+  // Divider line
   page.drawLine({
-    start: { x: 72, y: y - 82 },
-    end: { x: PAGE_WIDTH - 72, y: y - 82 },
+    start: { x: 72, y: y - 86 },
+    end: { x: PAGE_WIDTH - 72, y: y - 86 },
     color: rgb(0.9, 0.92, 0.95),
     thickness: 1,
   });
 
+  // Total — now comfortably inside the box (box bottom is at y - 132)
   drawText("Total", {
     x: 72,
-    y: y - 104,
+    y: y - 108,
     size: 12,
     color: rgb(0.06, 0.36, 0.55),
     bold: true,
   });
   drawText(formatMoney(data.totalAmount, data.currency), {
     x: amountX,
-    y: y - 104,
+    y: y - 108,
     size: 12,
     color: rgb(0.06, 0.36, 0.55),
     bold: true,
   });
 
-  const statusY = y - 158;
+  // ── Payment status ─────────────────────────────────────────────────────────
+  const statusY = y - CHARGES_BOX_HEIGHT - 46;
   drawText("Payment status", {
     x: 56,
     y: statusY,
@@ -409,16 +428,14 @@ export async function buildInvoicePdf(
     bold: true,
   });
 
-  drawText(
-    `Thank you for choosing ${process.env.NEXT_PUBLIC_COMPANY_NAME || "BioMobility"}.`,
-    {
-      x: 56,
-      y: 72,
-      size: 11,
-      color: rgb(0.07, 0.11, 0.17),
-      bold: true,
-    },
-  );
+  // ── Footer ─────────────────────────────────────────────────────────────────
+  drawText(`Thank you for choosing ${companyName()}.`, {
+    x: 56,
+    y: 72,
+    size: 11,
+    color: rgb(0.07, 0.11, 0.17),
+    bold: true,
+  });
   drawText(
     "This invoice was generated automatically after payment confirmation.",
     {

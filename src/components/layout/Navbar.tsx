@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/hooks/useAuth";
+import Image from "next/image";
 
 interface NavbarProps {
   locale: string;
@@ -50,19 +51,23 @@ export default function Navbar({ locale }: NavbarProps) {
       }`}
     >
       <div className="page-container">
-        <nav className="flex items-center justify-between h-16">
+        <nav className="flex items-center justify-between h-20">
           {/* Logo */}
-          <Link
-            href={`/${locale}`}
-            className="flex items-center gap-2 font-bold text-xl text-primary-700"
-            style={{ fontFamily: "var(--font-sora)" }}
-          >
-            <span className="text-2xl">♿</span>
-            <span>{process.env.NEXT_PUBLIC_COMPANY_NAME}</span>
-          </Link>
+          <div className="flex-shrink-0 ">
+            <Link href={`/${locale}`} className="flex items-center gap-2">
+              <Image
+                src="/logo.svg"
+                alt={`${process.env.NEXT_PUBLIC_COMPANY_NAME} Logo`}
+                width={220}
+                height={48}
+                className="object-contain"
+                priority
+              />
+            </Link>
+          </div>
 
           {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden md:flex items-center gap-8 ml-auto mr-10">
             {navLink("/wheelchairs", t("browse"))}
             {user && navLink("/dashboard", t("myBookings"))}
             {user?.role === "ADMIN" && navLink("/admin", t("admin"))}
