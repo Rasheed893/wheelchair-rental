@@ -94,7 +94,7 @@ export async function buildInvoicePdf(
   const fontArabicBold = await pdf.embedFont(fontBytes.bold, { subset: true });
 
   const logoBytes = await readFile(
-    path.join(process.cwd(), "public", "logo.png"),
+    path.join(process.cwd(), "public", "logo-full.png"),
   );
   const logoImage = await pdf.embedPng(logoBytes);
 
