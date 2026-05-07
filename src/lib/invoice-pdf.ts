@@ -94,12 +94,12 @@ export async function buildInvoicePdf(
   const fontArabicBold = await pdf.embedFont(fontBytes.bold, { subset: true });
 
   const logoBytes = await readFile(
-    path.join(process.cwd(), "public", "logo-full.png"),
+    path.join(process.cwd(), "public", "logo.png"),
   );
   const logoImage = await pdf.embedPng(logoBytes);
 
   // Scale logo to fit nicely: max 56px tall, proportional width
-  const logoDims = logoImage.scaleToFit(120, 56);
+  const logoDims = logoImage.scaleToFit(250, 70);
 
   const selectFont = (value: string, bold = false) => {
     if (ARABIC_TEXT_PATTERN.test(value)) {
@@ -239,18 +239,9 @@ export async function buildInvoicePdf(
 
   // ── FIX 2: Company name — reads from env, NO hardcoded string ─────────────
   // Position it to the right of however wide the logo is
-  const textStartX = logoX + logoDims.width + 10;
-
-  drawText(companyName(), {
-    x: textStartX,
-    y: PAGE_HEIGHT - 60,
-    size: 22,
-    color: rgb(0.07, 0.11, 0.17),
-    bold: true,
-  });
   drawText(`VAT: ${companyVatNumber()}`, {
-    x: textStartX,
-    y: PAGE_HEIGHT - 82,
+    x: logoX,
+    y: logoY - 14,
     size: 10,
     color: rgb(0.29, 0.33, 0.39),
   });
