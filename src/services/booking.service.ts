@@ -29,18 +29,37 @@ import { calculateBookingPricing } from "@/lib/pricing";
 
 export class BookingService {
   async expirePendingBookings(): Promise<number> {
+    const MAX_RETRIES = 3;
     const now = new Date();
-    const result = await prisma.booking.updateMany({
-      where: getExpiredReservationWhere(now),
-      data: {
-        paymentStatus: "EXPIRED",
-        status: "CANCELLED",
-        cancelledAt: now,
-        cancelReason: "Reservation expired before payment completion",
-      },
-    });
 
-    return result.count;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await prisma.booking.updateMany({
+          where: getExpiredReservationWhere(now),
+          data: {
+            paymentStatus: "EXPIRED",
+            status: "CANCELLED",
+            cancelledAt: now,
+            cancelReason: "Reservation expired before payment completion",
+          },
+        });
+
+        return result.count;
+      } catch (err) {
+        const isLastAttempt = attempt === MAX_RETRIES;
+
+        if (isLastAttempt) throw err;
+
+        const delay = 2000 * attempt; // 2s → 4s
+        logger.warn(
+          `[expirePendingBookings] DB connection failed, retrying in ${delay}ms (attempt ${attempt}/${MAX_RETRIES})`,
+        );
+        await new Promise((res) => setTimeout(res, delay));
+      }
+    }
+
+    // Unreachable, but satisfies TypeScript
+    return 0;
   }
 
   async create(
@@ -121,9 +140,7 @@ export class BookingService {
         paymentMethod: input.paymentMethod,
         paymentStatus: "PENDING",
         reservationExpiresAt:
-          input.paymentMethod === "ONLINE"
-            ? getReservationExpiryDate()
-            : null,
+          input.paymentMethod === "ONLINE" ? getReservationExpiryDate() : null,
         paidAt: null,
       },
       include: {
