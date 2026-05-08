@@ -45,10 +45,13 @@ export function emailLayout(content: string, footerNote?: string): string {
       .email-body { padding: 24px 20px 20px !important; font-size: 14px !important; }
       .email-footer { padding: 20px !important; }
       .info-table td { display: block !important; width: 100% !important; box-sizing: border-box; }
+      .stack-on-mobile td { display: block !important; width: 100% !important; box-sizing: border-box; }
       .info-label { border-bottom: none !important; padding-bottom: 2px !important;
                     font-size: 11px !important; color: #94a3b8 !important; }
       .info-value { padding-top: 0 !important; padding-bottom: 12px !important; }
-      .cta-btn { padding: 12px 20px !important; font-size: 14px !important; }
+      .cta-table, .cta-cell, .cta-btn { width: 100% !important; }
+      .cta-btn { display: block !important; box-sizing: border-box; padding: 12px 20px !important; font-size: 14px !important; text-align: center !important; }
+      .mobile-full { display: block !important; width: 100% !important; box-sizing: border-box; }
       h2 { font-size: 19px !important; }
       .amount-block { padding: 16px !important; }
       .amount-block .amount { font-size: 26px !important; }
@@ -56,7 +59,7 @@ export function emailLayout(content: string, footerNote?: string): string {
   </style>
 </head>
 <body style="margin:0;padding:0;background:${BG};font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
-             -webkit-font-smoothing:antialiased;word-break:break-word;">
+             -webkit-font-smoothing:antialiased;word-break:break-word;overflow-wrap:anywhere;">
 
   <table class="email-wrapper" width="100%" cellpadding="0" cellspacing="0" border="0"
          style="background:${BG};padding:40px 16px;">
@@ -64,7 +67,7 @@ export function emailLayout(content: string, footerNote?: string): string {
       <td align="center">
 
         <table class="email-card" width="100%" cellpadding="0" cellspacing="0" border="0"
-               style="max-width:600px;background:#ffffff;border-radius:16px;
+               style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;
                       box-shadow:0 1px 3px rgba(0,0,0,.07),0 4px 20px rgba(0,0,0,.07);
                       overflow:hidden;">
 
@@ -123,13 +126,13 @@ export function infoRow(label: string, value: string): string {
     <tr>
       <td class="info-label"
           style="padding:10px 14px;font-size:12px;color:#64748b;font-weight:600;
-                 text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;
+                 text-transform:uppercase;letter-spacing:.04em;white-space:normal;
                  vertical-align:top;width:140px;border-bottom:1px solid #f1f5f9;">
         ${label}
       </td>
       <td class="info-value"
           style="padding:10px 14px;font-size:14px;color:#0f172a;vertical-align:top;
-                 word-break:break-word;border-bottom:1px solid #f1f5f9;">
+                 word-break:break-word;overflow-wrap:anywhere;border-bottom:1px solid #f1f5f9;">
         ${value}
       </td>
     </tr>`;
@@ -143,9 +146,9 @@ export function sectionHeading(title: string): string {
 
 export function ctaButton(label: string, href: string): string {
   return `
-    <table cellpadding="0" cellspacing="0" border="0" style="margin:28px 0;">
+    <table class="cta-table" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0;">
       <tr>
-        <td style="background:${BRAND};border-radius:8px;">
+        <td class="cta-cell" style="background:${BRAND};border-radius:8px;">
           <a href="${href}" class="cta-btn"
              style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;
                     color:#ffffff;text-decoration:none;letter-spacing:.02em;">
@@ -154,6 +157,10 @@ export function ctaButton(label: string, href: string): string {
         </td>
       </tr>
     </table>`;
+}
+
+export function wrapValue(value: string): string {
+  return `<span style="display:block;max-width:100%;word-break:break-word;overflow-wrap:anywhere;">${value}</span>`;
 }
 
 export function badge(text: string, color: string, bg: string): string {

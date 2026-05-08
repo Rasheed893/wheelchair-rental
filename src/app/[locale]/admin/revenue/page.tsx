@@ -33,7 +33,7 @@ export default function AdminRevenuePage() {
 
   return (
     <div className="page-container py-10">
-      <div className="flex gap-8">
+      <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
         <AdminSidebar locale={locale} />
 
         <div className="flex-1 min-w-0">
@@ -42,7 +42,7 @@ export default function AdminRevenuePage() {
           </h1>
 
           {/* KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {[
               {
                 label: isAr
@@ -64,11 +64,11 @@ export default function AdminRevenuePage() {
                 color: "text-amber-700",
               },
             ].map((stat) => (
-              <div key={stat.label} className="card p-5">
-                <div className={`text-2xl font-bold mb-1 ${stat.color}`}>
+              <div key={stat.label} className="card min-w-0 p-5">
+                <div className={`mb-1 break-words text-xl font-bold sm:text-2xl ${stat.color}`}>
                   {stat.value}
                 </div>
-                <div className="text-xs text-slate-400">{stat.label}</div>
+                <div className="break-words text-xs text-slate-400">{stat.label}</div>
               </div>
             ))}
           </div>
@@ -84,8 +84,9 @@ export default function AdminRevenuePage() {
                 <div className="animate-spin w-8 h-8 rounded-full border-2 border-primary-600 border-t-transparent" />
               </div>
             ) : (
-              <div className="flex items-end gap-2 h-48 overflow-x-auto pb-2">
-                {data.map((point, i) => {
+              <div className="overflow-x-auto pb-2">
+                <div className="flex h-48 min-w-[560px] items-end gap-2">
+                  {data.map((point, i) => {
                   const height =
                     maxRevenue > 0 ? (point.revenue / maxRevenue) * 100 : 0;
                   return (
@@ -111,7 +112,8 @@ export default function AdminRevenuePage() {
                       </span>
                     </div>
                   );
-                })}
+                  })}
+                </div>
               </div>
             )}
 

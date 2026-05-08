@@ -16,7 +16,13 @@
 // }
 
 // src/lib/emails/templates/payment-received.ts
-import { emailLayout, infoRow, ctaButton, badge } from "./emailLayout";
+import {
+  emailLayout,
+  infoRow,
+  ctaButton,
+  badge,
+  wrapValue,
+} from "./emailLayout";
 
 export function paymentReceivedTemplate({
   customerName,
@@ -68,15 +74,15 @@ export function paymentReceivedTemplate({
     <p style="margin:0 0 12px;font-size:11px;font-weight:700;letter-spacing:.08em;
                text-transform:uppercase;color:#94a3b8;">Payment details</p>
 
-    <table width="100%" cellpadding="0" cellspacing="0" border="0"
+    <table class="info-table stack-on-mobile" width="100%" cellpadding="0" cellspacing="0" border="0"
            style="border:1px solid #e2e8f0;border-radius:10px;border-collapse:separate;
                   border-spacing:0;overflow:hidden;margin-bottom:28px;">
       <tbody>
-        ${infoRow("Booking ID", `<span style="font-family:monospace;font-weight:700;">${bookingId}</span>`)}
-        ${infoRow("Customer", customerName)}
+        ${infoRow("Booking ID", `<span style="font-family:monospace;font-weight:700;word-break:break-all;overflow-wrap:anywhere;">${bookingId}</span>`)}
+        ${infoRow("Customer", wrapValue(customerName))}
         ${paymentMethod ? infoRow("Method", paymentMethod === "ONLINE" ? badge("Online (Stripe)", "#166534", "#dcfce7") : badge("Cash on Delivery", "#92400e", "#fef3c7")) : ""}
-        ${paidAt ? infoRow("Paid at", paidAt) : ""}
-        ${amount ? infoRow("Total paid", `<strong>${currency} ${amount}</strong>`) : ""}
+        ${paidAt ? infoRow("Paid at", wrapValue(paidAt)) : ""}
+        ${amount ? infoRow("Total paid", `<strong style="word-break:break-word;overflow-wrap:anywhere;">${currency} ${amount}</strong>`) : ""}
       </tbody>
     </table>
 

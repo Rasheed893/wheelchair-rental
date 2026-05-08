@@ -63,12 +63,12 @@ export default function AdminUsersPage() {
 
   return (
     <div className="page-container py-10">
-      <div className="flex gap-8">
+      <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
         <AdminSidebar locale={locale} />
 
         <div className="flex-1 min-w-0">
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="section-heading">
                 {isAr ? "إدارة المستخدمين" : "Users"}
@@ -85,13 +85,60 @@ export default function AdminUsersPage() {
               placeholder={
                 isAr ? "ابحث بالاسم أو البريد..." : "Search by name or email..."
               }
-              className="input-field w-64"
+              className="input-field w-full sm:w-64"
             />
           </div>
 
           {/* Table */}
           <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="space-y-3 p-4 md:hidden">
+              {loading
+                ? [...Array(8)].map((_, i) => (
+                    <div key={i} className="animate-pulse rounded-2xl border border-slate-100 p-4">
+                      <div className="mb-3 h-4 w-1/2 rounded bg-slate-100" />
+                      <div className="space-y-2">
+                        <div className="h-3 w-full rounded bg-slate-100" />
+                        <div className="h-3 w-2/3 rounded bg-slate-100" />
+                      </div>
+                    </div>
+                  ))
+                : filtered.map((user) => (
+                    <div key={user.id} className="rounded-2xl border border-slate-100 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
+                          {user.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="break-words font-medium text-slate-900">
+                            {user.name}
+                          </div>
+                          <div className="break-all text-xs text-slate-400">
+                            {user.email}
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                            <span className="break-words">
+                              {user.phone ?? (isAr ? "ØºÙŠØ± Ù…ØªÙˆÙØ±" : "No phone")}
+                            </span>
+                            <span>•</span>
+                            <span>{format(new Date(user.createdAt), "MMM d, yyyy")}</span>
+                            <span>•</span>
+                            <span className="font-semibold text-primary-700">
+                              {user._count.bookings} {isAr ? "Ø­Ø¬Ø²" : "bookings"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+              {!loading && filtered.length === 0 && (
+                <div className="py-12 text-center text-slate-400">
+                  {isAr ? "Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ù…Ø³ØªØ®Ø¯Ù…ÙˆÙ†" : "No users found"}
+                </div>
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
@@ -130,11 +177,11 @@ export default function AdminUsersPage() {
                               <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm shrink-0">
                                 {user.name.charAt(0).toUpperCase()}
                               </div>
-                              <div>
-                                <div className="font-medium text-slate-900">
+                              <div className="min-w-0">
+                                <div className="break-words font-medium text-slate-900">
                                   {user.name}
                                 </div>
-                                <div className="text-slate-400 text-xs">
+                                <div className="break-all text-slate-400 text-xs">
                                   {user.email}
                                 </div>
                               </div>
@@ -173,7 +220,7 @@ export default function AdminUsersPage() {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex justify-center gap-2 p-4 border-t border-slate-100">
+              <div className="flex flex-wrap justify-center gap-2 border-t border-slate-100 p-4">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}

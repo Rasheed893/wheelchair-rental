@@ -27,7 +27,7 @@ export function passwordResetTemplate(name: string, resetLink: string): string {
                 padding:14px 16px;margin-bottom:24px;">
       <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;font-weight:600;
                  letter-spacing:.06em;text-transform:uppercase;">Or copy this link</p>
-      <p style="margin:0;font-size:12px;color:#0f5fa8;word-break:break-all;">
+      <p style="margin:0;font-size:12px;color:#0f5fa8;word-break:break-all;overflow-wrap:anywhere;">
         <a href="${resetLink}" style="color:#0f5fa8;text-decoration:none;">${resetLink}</a>
       </p>
     </div>
@@ -68,18 +68,36 @@ export function passwordResetTemplateAr(
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${companyName}</title>
+  <style>
+    @media only screen and (max-width: 620px) {
+      .email-wrapper { padding: 16px 8px !important; }
+      .email-card { border-radius: 12px !important; }
+      .email-header { padding: 24px 20px 20px !important; }
+      .email-body { padding: 24px 20px 20px !important; }
+      .email-footer { padding: 20px !important; }
+      .rtl-cta-cell,
+      .rtl-cta-link {
+        width: 100% !important;
+      }
+      .rtl-cta-link {
+        display: block !important;
+        box-sizing: border-box;
+        text-align: center !important;
+      }
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background:#f8fafc;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;direction:rtl;">
-  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f8fafc;padding:40px 16px;">
+<body style="margin:0;padding:0;background:#f8fafc;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;direction:rtl;word-break:break-word;overflow-wrap:anywhere;">
+  <table class="email-wrapper" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f8fafc;padding:40px 16px;">
     <tr>
       <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" border="0"
+        <table class="email-card" width="100%" cellpadding="0" cellspacing="0" border="0"
                style="max-width:600px;width:100%;background:#fff;border-radius:16px;
                       box-shadow:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.06);overflow:hidden;">
 
           <!-- Header -->
           <tr>
-            <td style="background:#e8f2fb;padding:32px 48px 28px;text-align:center;
+            <td class="email-header" style="background:#e8f2fb;padding:32px 48px 28px;text-align:center;
                         border-bottom:1px solid #e2e8f0;">
               <img src="${baseUrl}/logo.png" alt="${companyName}"
                    width="220"
@@ -89,7 +107,7 @@ export function passwordResetTemplateAr(
 
           <!-- Body -->
           <tr>
-            <td style="padding:40px 48px 32px;color:#0f172a;font-size:15px;line-height:1.7;
+            <td class="email-body" style="padding:40px 48px 32px;color:#0f172a;font-size:15px;line-height:1.7;
                         text-align:right;">
               <div style="width:52px;height:52px;border-radius:12px;background:#e8f2fb;
                           font-size:26px;line-height:52px;text-align:center;margin-bottom:20px;">
@@ -104,10 +122,11 @@ export function passwordResetTemplateAr(
               </p>
 
               <!-- CTA -->
-              <table cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
                 <tr>
-                  <td style="background:#0f5fa8;border-radius:8px;">
+                  <td class="rtl-cta-cell" style="background:#0f5fa8;border-radius:8px;">
                     <a href="${resetLink}"
+                       class="rtl-cta-link"
                        style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:700;
                               color:#fff;text-decoration:none;">
                       إعادة تعيين كلمة المرور
@@ -120,7 +139,7 @@ export function passwordResetTemplateAr(
               <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
                           padding:14px 16px;margin-bottom:24px;">
                 <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;font-weight:600;">أو انسخ الرابط التالي</p>
-                <p style="margin:0;font-size:12px;color:#0f5fa8;word-break:break-all;">
+                <p style="margin:0;font-size:12px;color:#0f5fa8;word-break:break-all;overflow-wrap:anywhere;">
                   <a href="${resetLink}" style="color:#0f5fa8;text-decoration:none;">${resetLink}</a>
                 </p>
               </div>
@@ -142,7 +161,7 @@ export function passwordResetTemplateAr(
 
           <!-- Footer -->
           <tr>
-            <td style="background:#f8fafc;border-top:1px solid #e2e8f0;
+            <td class="email-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;
                         padding:24px 48px;text-align:center;">
               <p style="margin:0 0 6px;font-size:13px;color:#64748b;">
                 هذا بريد إلكتروني آلي متعلق بأمان حسابك.

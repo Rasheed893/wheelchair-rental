@@ -1,6 +1,12 @@
 // src/lib/emails/templates/booking-confirmation.ts
 import { formatAddressHtml } from "@/lib/invoice-format";
-import { emailLayout, infoRow, sectionHeading, badge } from "./emailLayout";
+import {
+  emailLayout,
+  infoRow,
+  sectionHeading,
+  badge,
+  wrapValue,
+} from "./emailLayout";
 
 export function bookingConfirmationTemplate({
   customerName,
@@ -56,41 +62,41 @@ export function bookingConfirmationTemplate({
     </p>
 
     <!-- Booking ID pill -->
-    <div style="background:#f1f5f9;border-radius:8px;padding:12px 16px;
-                margin-bottom:28px;display:inline-block;">
+    <div class="mobile-full" style="background:#f1f5f9;border-radius:8px;padding:12px 16px;
+                margin-bottom:28px;display:inline-block;max-width:100%;">
       <span style="font-size:12px;color:#64748b;font-weight:600;letter-spacing:.06em;
                    text-transform:uppercase;">Booking ID</span>&nbsp;&nbsp;
       <span style="font-size:14px;font-weight:700;color:#0f172a;
-                   font-family:monospace;">${bookingId}</span>
+                   font-family:monospace;word-break:break-all;overflow-wrap:anywhere;">${bookingId}</span>
     </div>
 
     ${sectionHeading("Delivery details")}
-    <table width="100%" cellpadding="0" cellspacing="0" border="0"
+    <table class="info-table stack-on-mobile" width="100%" cellpadding="0" cellspacing="0" border="0"
            style="border:1px solid #e2e8f0;border-radius:10px;border-collapse:separate;
                   border-spacing:0;overflow:hidden;">
       <tbody>
-        ${infoRow("Customer", customerName)}
-        ${infoRow("Phone", phoneNumber)}
-        ${infoRow("City", deliveryCity)}
-        ${infoRow("Delivery window", deliveryWindow)}
+        ${infoRow("Customer", wrapValue(customerName))}
+        ${infoRow("Phone", wrapValue(phoneNumber))}
+        ${infoRow("City", wrapValue(deliveryCity))}
+        ${infoRow("Delivery window", wrapValue(deliveryWindow))}
         ${infoRow("Address", `<span style="white-space:pre-line;word-break:break-word">${formatAddressHtml(deliveryAddress)}</span>`)}
-        ${deliveryNotes ? infoRow("Notes", deliveryNotes) : ""}
+        ${deliveryNotes ? infoRow("Notes", wrapValue(deliveryNotes)) : ""}
       </tbody>
     </table>
 
     ${sectionHeading("Rental details")}
-    <table width="100%" cellpadding="0" cellspacing="0" border="0"
+    <table class="info-table stack-on-mobile" width="100%" cellpadding="0" cellspacing="0" border="0"
            style="border:1px solid #e2e8f0;border-radius:10px;border-collapse:separate;
                   border-spacing:0;overflow:hidden;">
       <tbody>
-        ${infoRow("Wheelchair", wheelchairName)}
-        ${infoRow("Start date", startDate)}
-        ${infoRow("End date", endDate)}
+        ${infoRow("Wheelchair", wrapValue(wheelchairName))}
+        ${infoRow("Start date", wrapValue(startDate))}
+        ${infoRow("End date", wrapValue(endDate))}
       </tbody>
     </table>
 
     ${sectionHeading("Charges")}
-    <table width="100%" cellpadding="0" cellspacing="0" border="0"
+    <table class="info-table stack-on-mobile" width="100%" cellpadding="0" cellspacing="0" border="0"
            style="border:1px solid #e2e8f0;border-radius:10px;border-collapse:separate;
                   border-spacing:0;overflow:hidden;">
       <tbody>
@@ -101,7 +107,7 @@ export function bookingConfirmationTemplate({
           <td style="padding:12px 14px;font-size:14px;color:#0f172a;font-weight:700;
                       border-top:1px solid #e2e8f0;width:160px;">Total</td>
           <td style="padding:12px 14px;font-size:14px;color:#0f172a;font-weight:700;
-                      border-top:1px solid #e2e8f0;">AED ${totalAmount}</td>
+                      border-top:1px solid #e2e8f0;word-break:break-word;overflow-wrap:anywhere;">AED ${totalAmount}</td>
         </tr>
       </tbody>
     </table>

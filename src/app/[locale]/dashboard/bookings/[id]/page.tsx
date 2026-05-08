@@ -143,7 +143,7 @@ export default function BookingDetailPage({ params }: Props) {
   return (
     <div className="page-container py-10">
       <div className="mx-auto max-w-5xl">
-        <nav className="mb-6 flex items-center gap-2 text-sm text-slate-400">
+        <nav className="mb-6 flex flex-wrap items-center gap-2 text-sm text-slate-400">
           <Link href={`/${locale}/dashboard`} className="hover:text-primary-600">
             My Bookings
           </Link>
@@ -154,8 +154,8 @@ export default function BookingDetailPage({ params }: Props) {
         </nav>
 
         {isPending && (
-          <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <div>
+          <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="text-sm font-semibold text-amber-900">
                 Payment Pending
               </p>
@@ -165,7 +165,7 @@ export default function BookingDetailPage({ params }: Props) {
             </div>
             <Link
               href={`/${locale}/wheelchairs/${booking.wheelchairId}/book?bookingId=${booking.id}`}
-              className="btn-primary shrink-0 px-4 py-2 text-sm"
+              className="btn-primary w-full px-4 py-2 text-sm sm:w-auto sm:shrink-0"
             >
               Pay Now
             </Link>
@@ -175,12 +175,12 @@ export default function BookingDetailPage({ params }: Props) {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <div className="card p-6">
-              <div className="mb-4 flex items-start justify-between">
-                <div>
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div className="min-w-0">
                   <span className={STATUS_BADGE[booking.status]}>
                     {booking.status}
                   </span>
-                  <h1 className="mt-2 text-xl font-bold text-slate-900">
+                  <h1 className="mt-2 break-words text-xl font-bold text-slate-900">
                     {locale === "ar"
                       ? booking.wheelchair.nameAr
                       : booking.wheelchair.name}
@@ -188,16 +188,16 @@ export default function BookingDetailPage({ params }: Props) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4">
+              <div className="grid grid-cols-1 gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
                 <div>
                   <p className="mb-1 text-xs text-slate-400">Start Date</p>
-                  <p className="text-sm font-semibold text-slate-900">
+                  <p className="break-words text-sm font-semibold text-slate-900">
                     {format(new Date(booking.startDate), "EEEE, MMM d, yyyy")}
                   </p>
                 </div>
                 <div>
                   <p className="mb-1 text-xs text-slate-400">End Date</p>
-                  <p className="text-sm font-semibold text-slate-900">
+                  <p className="break-words text-sm font-semibold text-slate-900">
                     {format(new Date(booking.endDate), "EEEE, MMM d, yyyy")}
                   </p>
                 </div>
@@ -217,12 +217,12 @@ export default function BookingDetailPage({ params }: Props) {
 
               <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
                 <p className="font-medium text-slate-900">Delivery</p>
-                <p className="mt-2">Phone: {booking.phoneNumber}</p>
-                <p>City: {formatDeliveryCity(booking.deliveryCity)}</p>
-                <p>Window: {formatDeliveryWindow(booking.deliveryWindow)}</p>
-                <p className="whitespace-pre-line">{booking.deliveryAddress}</p>
+                <p className="mt-2 break-words">Phone: {booking.phoneNumber}</p>
+                <p className="break-words">City: {formatDeliveryCity(booking.deliveryCity)}</p>
+                <p className="break-words">Window: {formatDeliveryWindow(booking.deliveryWindow)}</p>
+                <p className="whitespace-pre-line break-words">{booking.deliveryAddress}</p>
                 {booking.deliveryNotes ? (
-                  <p className="mt-2">Notes: {booking.deliveryNotes}</p>
+                  <p className="mt-2 break-words">Notes: {booking.deliveryNotes}</p>
                 ) : null}
               </div>
 
@@ -242,33 +242,33 @@ export default function BookingDetailPage({ params }: Props) {
             <div className="card p-6">
               <h2 className="mb-4 font-semibold text-slate-900">Payment Info</h2>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
+                <div className="flex flex-wrap justify-between gap-2">
                   <span className="text-slate-500">Method</span>
-                  <span>
+                  <span className="break-words text-right">
                     {booking.paymentMethod === "CASH"
                       ? "Cash on Delivery"
                       : "Online (Stripe)"}
                   </span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex flex-wrap justify-between gap-2">
                   <span className="text-slate-500">Payment Status</span>
                   <span className={PAY_STATUS[booking.paymentStatus]}>
                     {booking.paymentStatus}
                   </span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex flex-wrap justify-between gap-2">
                   <span className="text-slate-500">Subtotal</span>
                   <span>{formatAED(pricing.subtotal)}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex flex-wrap justify-between gap-2">
                   <span className="text-slate-500">Delivery Fee</span>
                   <span>{formatAED(pricing.deliveryFee)}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex flex-wrap justify-between gap-2">
                   <span className="text-slate-500">VAT (5%)</span>
                   <span>{formatAED(pricing.tax)}</span>
                 </div>
-                <div className="flex justify-between font-semibold">
+                <div className="flex flex-wrap justify-between gap-2 font-semibold">
                   <span className="text-slate-500">Total</span>
                   <span>{formatAED(pricing.total)}</span>
                 </div>
@@ -289,37 +289,37 @@ export default function BookingDetailPage({ params }: Props) {
               <div className="card p-5">
                 <h2 className="mb-4 font-semibold text-slate-900">Invoice</h2>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
+                  <div className="flex flex-wrap justify-between gap-2">
                     <span className="text-slate-500">Invoice #</span>
-                    <span className="font-mono text-xs font-semibold">
+                    <span className="break-all font-mono text-xs font-semibold text-right">
                       {invoice.invoiceNumber}
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex flex-wrap justify-between gap-2">
                     <span className="text-slate-500">Subtotal</span>
                     <span>{formatAED(Number(invoice.subtotal))}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex flex-wrap justify-between gap-2">
                     <span className="text-slate-500">Delivery Fee</span>
                     <span>{formatAED(Number(booking.deliveryFee))}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex flex-wrap justify-between gap-2">
                     <span className="text-slate-500">VAT (5%)</span>
                     <span>{formatAED(Number(invoice.taxAmount))}</span>
                   </div>
-                  <div className="flex justify-between font-bold">
+                  <div className="flex flex-wrap justify-between gap-2 font-bold">
                     <span>Total</span>
                     <span className="text-primary-700">
                       {formatAED(Number(invoice.totalAmount))}
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex flex-wrap justify-between gap-2">
                     <span className="text-slate-500">Delivery city</span>
-                    <span>{formatDeliveryCity(booking.deliveryCity)}</span>
+                    <span className="break-words text-right">{formatDeliveryCity(booking.deliveryCity)}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex flex-wrap justify-between gap-2">
                     <span className="text-slate-500">Delivery window</span>
-                    <span>{formatDeliveryWindow(booking.deliveryWindow)}</span>
+                    <span className="break-words text-right">{formatDeliveryWindow(booking.deliveryWindow)}</span>
                   </div>
                   <p className="pt-1 text-center text-xs text-slate-400">
                     Issued: {format(new Date(invoice.issuedAt), "MMM d, yyyy")}
@@ -352,11 +352,11 @@ export default function BookingDetailPage({ params }: Props) {
                 Booking Details
               </h3>
               <div className="space-y-2 text-xs text-slate-500">
-                <div className="flex justify-between">
+                <div className="flex flex-wrap justify-between gap-2">
                   <span>Created</span>
                   <span>{format(new Date(booking.createdAt), "MMM d, yyyy")}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex flex-wrap justify-between gap-2">
                   <span>Updated</span>
                   <span>{format(new Date(booking.updatedAt), "MMM d, yyyy")}</span>
                 </div>

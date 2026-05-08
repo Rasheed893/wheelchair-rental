@@ -121,7 +121,7 @@ export default function DashboardPage({
         </p>
       </div>
 
-      <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
             label: isAr ? "إجمالي الحجوزات" : "Total Bookings",
@@ -144,19 +144,23 @@ export default function DashboardPage({
             color: "text-primary-600",
           },
         ].map((stat) => (
-          <div key={stat.label} className="card p-4">
-            <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
-            <div className="mt-1 text-xs text-slate-400">{stat.label}</div>
+          <div key={stat.label} className="card min-w-0 p-4">
+            <div
+              className={`min-w-0 break-words text-xl font-bold leading-tight sm:text-2xl ${stat.color}`}
+            >
+              {stat.value}
+            </div>
+            <div className="mt-1 break-words text-xs text-slate-400">{stat.label}</div>
           </div>
         ))}
       </div>
 
-      <div className="mb-6 flex gap-2 border-b border-slate-100 pb-0">
+      <div className="mb-6 flex flex-wrap gap-2 border-b border-slate-100 pb-2">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as "all" | "active" | "past")}
-            className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            className={`-mb-px flex min-w-fit items-center gap-2 rounded-t-xl border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? "border-primary-600 text-primary-600"
                 : "border-transparent text-slate-500 hover:text-slate-700"

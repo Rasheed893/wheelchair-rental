@@ -63,10 +63,10 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
 
   return (
     <div className="card p-5 animate-slide-up">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         {/* Info */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
             <span className={STATUS_BADGE[booking.status]}>{statusLabel}</span>
             {booking.invoice && (
               <span className="badge badge-blue">
@@ -75,11 +75,11 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
             )}
           </div>
 
-          <h3 className="font-semibold text-slate-900 text-base truncate">
+          <h3 className="break-words text-base font-semibold text-slate-900">
             {name}
           </h3>
 
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="mt-1 break-words text-sm text-slate-500">
             {format(new Date(booking.startDate), "MMM d, yyyy")}
             {" → "}
             {format(new Date(booking.endDate), "MMM d, yyyy")}
@@ -90,16 +90,16 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
             </span>
           </p>
 
-          <p className="text-slate-400 text-xs mt-1">
+          <p className="mt-1 break-all text-xs text-slate-400">
             {isAr ? "رقم الحجز:" : "Booking #"}
             {booking.id.slice(-8).toUpperCase()}
           </p>
-          <p className="text-slate-500 text-xs mt-1">{paymentStatusLabel}</p>
+          <p className="mt-1 break-words text-xs text-slate-500">{paymentStatusLabel}</p>
         </div>
 
         {/* Price */}
-        <div className="text-right shrink-0">
-          <div className="text-xl font-bold text-slate-900">
+        <div className="shrink-0 sm:text-right">
+          <div className="break-words text-lg font-bold text-slate-900 sm:text-xl">
             {formatAED(totalAmount)}
           </div>
           <div className="text-xs text-slate-400 mt-0.5">
@@ -109,10 +109,10 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100">
+      <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:flex-wrap sm:items-center">
         <Link
           href={`/${locale}/dashboard/bookings/${booking.id}`}
-          className="btn-outline py-1.5 px-3 text-xs"
+          className="btn-outline w-full px-3 py-1.5 text-xs sm:w-auto"
         >
           {isAr ? "التفاصيل" : "View Details"}
         </Link>
@@ -123,7 +123,7 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
           !reservationExpired && (
             <Link
               href={`/${locale}/wheelchairs/${booking.wheelchairId}/book?bookingId=${booking.id}`}
-              className="btn-primary py-1.5 px-3 text-xs"
+              className="btn-primary w-full px-3 py-1.5 text-xs sm:w-auto"
             >
               {isAr ? "أكمل الدفع" : "`Complete Payment`"}
             </Link>
@@ -132,7 +132,7 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
         {booking.invoice && (
           <Link
             href={`/${locale}/dashboard/bookings/${booking.id}#invoice`}
-            className="btn-outline py-1.5 px-3 text-xs"
+            className="btn-outline w-full px-3 py-1.5 text-xs sm:w-auto"
           >
             {isAr ? "عرض الفاتورة" : "View Invoice"}
           </Link>
@@ -141,7 +141,7 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
         {canCancel && onCancel && (
           <button
             onClick={() => onCancel(booking.id)}
-            className="ms-auto text-xs text-red-500 hover:text-red-700 transition-colors font-medium"
+            className="text-left text-xs font-medium text-red-500 transition-colors hover:text-red-700 sm:ms-auto sm:text-right"
           >
             {isAr ? "إلغاء" : "Cancel"}
           </button>

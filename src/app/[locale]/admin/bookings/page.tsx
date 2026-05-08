@@ -236,7 +236,7 @@ export default function AdminBookingsPage() {
 
   return (
     <div className="page-container py-10">
-      <div className="flex gap-8">
+      <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
         <AdminSidebar locale={locale} />
 
         <div className="min-w-0 flex-1">
@@ -253,7 +253,7 @@ export default function AdminBookingsPage() {
               <label className="mb-1.5 block text-sm font-medium text-slate-700">
                 Search by booking ID or email
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
@@ -266,7 +266,7 @@ export default function AdminBookingsPage() {
                     setPage(1);
                     setQuery(searchInput);
                   }}
-                  className="btn-outline px-4"
+                  className="btn-outline w-full px-4 sm:w-auto"
                 >
                   Search
                 </button>
@@ -326,7 +326,138 @@ export default function AdminBookingsPage() {
           )}
 
           <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="space-y-4 p-4 lg:hidden">
+              {loading
+                ? Array.from({ length: 5 }, (_, index) => (
+                    <div key={index} className="animate-pulse rounded-2xl border border-slate-100 p-4">
+                      <div className="mb-3 h-4 w-1/2 rounded bg-slate-100" />
+                      <div className="space-y-2">
+                        <div className="h-3 w-full rounded bg-slate-100" />
+                        <div className="h-3 w-3/4 rounded bg-slate-100" />
+                        <div className="h-3 w-2/3 rounded bg-slate-100" />
+                      </div>
+                    </div>
+                  ))
+                : bookings.map((booking) => {
+                    const nextStatusOptions =
+                      NEXT_STATUS_OPTIONS[booking.status] ?? [];
+                    const isUpdatingStatus =
+                      busyAction === `status:${booking.id}`;
+                    const isMarkingPaid =
+                      busyAction === `paid:${booking.id}`;
+                    const isCancelling =
+                      busyAction === `cancel:${booking.id}`;
+
+                    return (
+                      <div key={booking.id} className="rounded-2xl border border-slate-100 p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="break-all font-mono text-xs text-slate-500">
+                              #{booking.id.slice(-8).toUpperCase()}
+                            </p>
+                            <p className="mt-1 break-words font-medium text-slate-900">
+                              {booking.user?.name ?? "Unknown"}
+                            </p>
+                            <p className="break-all text-xs text-slate-500">
+                              {booking.user?.email ?? "No email"}
+                            </p>
+                            <p className="break-words text-xs text-slate-400">
+                              {booking.phoneNumber}
+                            </p>
+                          </div>
+                          <span className={STATUS_BADGE[booking.status]}>
+                            {booking.status}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 space-y-2 text-sm text-slate-600">
+                          <p className="break-words">
+                            {booking.wheelchair?.name ?? "Unknown"}
+                          </p>
+                          <p>
+                            {format(new Date(booking.startDate), "MMM d")} to{" "}
+                            {format(new Date(booking.endDate), "MMM d, yyyy")}
+                          </p>
+                          <p className="font-semibold text-slate-900">
+                            {formatAED(Number(booking.totalPrice))}
+                          </p>
+                          <p className="break-words">
+                            {booking.paymentMethod} · {getPaymentLabel(booking)}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            Created {format(new Date(booking.createdAt), "MMM d, yyyy")}
+                          </p>
+                        </div>
+
+                        <div className="mt-4 flex flex-col gap-2">
+                          {booking.paymentMethod === "CASH" &&
+                            booking.paymentStatus !== "PAID" && (
+                              <button
+                                type="button"
+                                onClick={() => handleMarkPaid(booking.id)}
+                                disabled={Boolean(busyAction)}
+                                className="btn-outline w-full justify-center py-2 text-xs"
+                              >
+                                {isMarkingPaid ? "Marking..." : "Mark Paid"}
+                              </button>
+                            )}
+
+                          {nextStatusOptions.length > 0 && (
+                            <>
+                              <select
+                                value={
+                                  selectedStatuses[booking.id] ??
+                                  nextStatusOptions[0]
+                                }
+                                onChange={(event) =>
+                                  setSelectedStatuses((current) => ({
+                                    ...current,
+                                    [booking.id]: event.target.value as BookingStatus,
+                                  }))
+                                }
+                                className="input-field py-2 text-xs"
+                                disabled={Boolean(busyAction)}
+                              >
+                                {nextStatusOptions.map((value) => (
+                                  <option key={value} value={value}>
+                                    {value}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => handleStatusUpdate(booking.id)}
+                                disabled={Boolean(busyAction)}
+                                className="btn-primary w-full py-2 text-xs"
+                              >
+                                {isUpdatingStatus ? "Saving..." : "Update Status"}
+                              </button>
+                            </>
+                          )}
+
+                          {["PENDING", "CONFIRMED"].includes(booking.status) && (
+                            <button
+                              type="button"
+                              onClick={() => handleCancel(booking.id)}
+                              disabled={Boolean(busyAction)}
+                              className="btn-danger w-full justify-center py-2 text-xs"
+                            >
+                              {isCancelling ? "Cancelling..." : "Cancel"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+              {!loading && bookings.length === 0 && (
+                <div className="py-12 text-center text-slate-400">
+                  No bookings found.
+                </div>
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto lg:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500">
@@ -365,7 +496,7 @@ export default function AdminBookingsPage() {
                         return (
                           <tr key={booking.id} className="hover:bg-slate-50/50">
                             <td className="px-4 py-4">
-                              <div className="font-mono text-xs text-slate-500">
+                              <div className="break-all font-mono text-xs text-slate-500">
                                 #{booking.id.slice(-8).toUpperCase()}
                               </div>
                             </td>
@@ -373,14 +504,14 @@ export default function AdminBookingsPage() {
                               <div className="font-medium text-slate-900">
                                 {booking.user?.name ?? "Unknown"}
                               </div>
-                              <div className="text-xs text-slate-500">
+                              <div className="break-all text-xs text-slate-500">
                                 {booking.user?.email ?? "No email"}
                               </div>
-                              <div className="text-xs text-slate-400">
+                              <div className="break-words text-xs text-slate-400">
                                 {booking.phoneNumber}
                               </div>
                             </td>
-                            <td className="px-4 py-4 text-slate-700">
+                            <td className="px-4 py-4 break-words text-slate-700">
                               {booking.wheelchair?.name ?? "Unknown"}
                             </td>
                             <td className="px-4 py-4 text-xs text-slate-500">
@@ -491,7 +622,7 @@ export default function AdminBookingsPage() {
             </div>
 
             {totalPages > 1 && (
-              <div className="flex justify-center gap-2 border-t border-slate-100 p-4">
+              <div className="flex flex-wrap justify-center gap-2 border-t border-slate-100 p-4">
                 {Array.from(
                   { length: totalPages },
                   (_, index) => index + 1,

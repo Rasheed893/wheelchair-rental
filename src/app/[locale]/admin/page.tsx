@@ -119,7 +119,7 @@ export default async function AdminDashboardPage({ params }: Props) {
 
   return (
     <div className="page-container py-10">
-      <div className="flex gap-8">
+      <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
         <AdminSidebar locale={locale} />
 
         <div className="flex-1 min-w-0">
@@ -128,14 +128,14 @@ export default async function AdminDashboardPage({ params }: Props) {
           </h1>
 
           {/* Stats grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {STAT_CARDS.map((s) => (
-              <div key={s.label} className="card p-5">
+              <div key={s.label} className="card min-w-0 p-5">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-2xl">{s.icon}</span>
                 </div>
-                <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
-                <div className="text-xs text-slate-400 mt-1">{s.label}</div>
+                <div className={`break-words text-xl font-bold sm:text-2xl ${s.color}`}>{s.value}</div>
+                <div className="mt-1 break-words text-xs text-slate-400">{s.label}</div>
               </div>
             ))}
 
@@ -161,7 +161,7 @@ export default async function AdminDashboardPage({ params }: Props) {
 
           {/* Recent bookings table */}
           <div className="card overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="font-semibold text-slate-900">
                 {isAr ? "أحدث الحجوزات" : "Recent Bookings"}
               </h2>
@@ -173,7 +173,38 @@ export default async function AdminDashboardPage({ params }: Props) {
               </Link>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="space-y-3 p-4 md:hidden">
+              {stats.recentBookings.map((booking) => (
+                <div key={booking.id} className="rounded-2xl border border-slate-100 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="break-words font-medium text-slate-900">
+                        {booking.user.name}
+                      </div>
+                      <div className="break-all text-xs text-slate-400">
+                        {booking.user.email}
+                      </div>
+                    </div>
+                    <span className={STATUS_BADGE[booking.status]}>
+                      {booking.status}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1 text-sm text-slate-600">
+                    <p className="break-words">
+                      {isAr
+                        ? booking.wheelchair.nameAr
+                        : booking.wheelchair.name}
+                    </p>
+                    <p>{format(new Date(booking.createdAt), "MMM d, yyyy")}</p>
+                    <p className="font-semibold text-slate-900">
+                      {formatAED(Number(booking.totalPrice))}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
@@ -204,11 +235,11 @@ export default async function AdminDashboardPage({ params }: Props) {
                         <div className="font-medium text-slate-900">
                           {booking.user.name}
                         </div>
-                        <div className="text-slate-400 text-xs">
+                        <div className="text-slate-400 text-xs break-all">
                           {booking.user.email}
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-slate-600">
+                      <td className="px-5 py-4 text-slate-600 break-words">
                         {isAr
                           ? booking.wheelchair.nameAr
                           : booking.wheelchair.name}
