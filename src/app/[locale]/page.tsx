@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import WheelchairCard from "@/components/wheelchair/WheelchairCard";
 import { buildHomeMetadata, type Locale } from "@/lib/seo";
+import { setRequestLocale } from "next-intl/server";
 import { backfillMissingWheelchairSlugs } from "@/lib/slug";
 import {
   buildLocalBusinessSchema,
@@ -16,6 +17,7 @@ export const revalidate = 3600;
 export async function generateStaticParams() {
   return [{ locale: "en" }, { locale: "ar" }];
 }
+
 interface Props {
   params: Promise<{ locale: string }>;
 }
@@ -28,7 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 const getFeaturedWheelchairs = unstable_cache(
   async () => {
     try {
-      await backfillMissingWheelchairSlugs();
+      // await backfillMissingWheelchairSlugs();
       return await prisma.wheelchair.findMany({
         where: { status: "AVAILABLE" },
         take: 6,
@@ -44,7 +46,9 @@ const getFeaturedWheelchairs = unstable_cache(
 );
 export default async function HomePage({ params }: Props) {
   const { locale } = await params;
+  setRequestLocale(locale);
   const isAr = locale === "ar";
+  await backfillMissingWheelchairSlugs();
   const wheelchairs = await getFeaturedWheelchairs();
   const schemas = [
     buildWebsiteSchema(locale as Locale),

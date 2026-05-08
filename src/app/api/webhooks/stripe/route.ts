@@ -81,7 +81,8 @@ export async function POST(req: NextRequest) {
     console.error("[PAYMENT ERROR]", {
       bookingId:
         event.type === "payment_intent.succeeded"
-          ? (event.data.object as Stripe.PaymentIntent).metadata?.bookingId ?? null
+          ? ((event.data.object as Stripe.PaymentIntent).metadata?.bookingId ??
+            null)
           : null,
       error,
     });
