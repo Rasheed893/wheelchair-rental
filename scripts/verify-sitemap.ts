@@ -8,7 +8,7 @@ const indexXml = renderSitemapIndex([
   { url: "https://example.com/sitemaps/pages.xml" },
 ]);
 const pagesXml = renderUrlSet([
-  { path: "/", priority: "1.0", changeFrequency: "weekly" },
+  { path: "/", priority: 1.0, changeFrequency: "weekly" },
 ]);
 const wheelchairsXml = renderWheelchairUrlSet([
   {
