@@ -167,9 +167,6 @@ export function renderWheelchairUrlSet(
       const iso = toISODate(entry.updatedAt);
       const lastmod = iso ? `<lastmod>${iso}</lastmod>` : "";
 
-      const changefreq = "<changefreq>weekly</changefreq>";
-      const priority = "<priority>0.8</priority>";
-
       return locales
         .map((locale) => {
           const localizedPath = buildLocalizedPath(locale, basePath);
@@ -177,18 +174,9 @@ export function renderWheelchairUrlSet(
           return `<url>
 <loc>${absoluteUrl(localizedPath)}</loc>
 ${lastmod}
-${changefreq}
-${priority}
-${renderAlternateLinks(basePath)}
-</url>
-
-<!-- Booking Page -->
-<url>
-<loc>${absoluteUrl(buildLocalizedPath(locale, `${basePath}/book`))}</loc>
-${lastmod}
 <changefreq>weekly</changefreq>
-<priority>0.7</priority>
-${renderAlternateLinks(`${basePath}/book`)}
+<priority>0.8</priority>
+${renderAlternateLinks(basePath)}
 </url>`;
         })
         .join("");

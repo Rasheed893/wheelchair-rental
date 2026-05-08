@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/hooks/useAuth";
 import { loginSchema, type LoginInput } from "@/validators/auth.validator";
 
+// export const dynamic = "force-dynamic";
 export default function LoginPage({
   params,
 }: {
