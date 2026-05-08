@@ -1,12 +1,14 @@
-// src/app/[locale]/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import WheelchairCard from "@/components/wheelchair/WheelchairCard";
-import { buildHomeMetadata, BASE_URL, SUPPORT_PHONE } from "@/lib/seo";
-import type { Locale } from "@/lib/seo";
-
-// ── Metadata ──────────────────────────────────────────────────────────────────
+import { buildHomeMetadata, type Locale } from "@/lib/seo";
+import { backfillMissingWheelchairSlugs } from "@/lib/slug";
+import {
+  buildLocalBusinessSchema,
+  buildWebsiteSchema,
+  serializeJsonLd,
+} from "@/lib/structured-data";
 
 interface Props {
   params: Promise<{ locale: string }>;
@@ -17,10 +19,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return buildHomeMetadata(locale as Locale);
 }
 
-// ── Data ──────────────────────────────────────────────────────────────────────
-
 async function getFeaturedWheelchairs() {
   try {
+    await backfillMissingWheelchairSlugs();
     return await prisma.wheelchair.findMany({
       where: { status: "AVAILABLE" },
       take: 6,
@@ -32,70 +33,31 @@ async function getFeaturedWheelchairs() {
   }
 }
 
-// ── JSON-LD: LocalBusiness ─────────────────────────────────────────────────────
-
-function LocalBusinessJsonLd() {
-  const schema = {
-    "@context": "https://schema.org",
-    "@type": "LocalBusiness",
-    name: "WheelRent",
-    url: BASE_URL,
-    logo: `${BASE_URL}/logo.png`,
-    image: `${BASE_URL}/og-default.jpg`,
-    description:
-      "Wheelchair rental service in UAE offering standard, electric, pediatric, and bariatric wheelchairs with fast delivery.",
-    areaServed: {
-      "@type": "Country",
-      name: "United Arab Emirates",
-    },
-    address: {
-      "@type": "PostalAddress",
-      addressCountry: "AE",
-    },
-    contactPoint: SUPPORT_PHONE
-      ? {
-          "@type": "ContactPoint",
-          telephone: SUPPORT_PHONE,
-          contactType: "customer support",
-          availableLanguage: ["English", "Arabic"],
-        }
-      : undefined,
-    currenciesAccepted: "AED",
-    priceRange: "$$",
-    sameAs: [],
-  };
-
-  return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-    />
-  );
-}
-
-// ── Page ──────────────────────────────────────────────────────────────────────
-
 export default async function HomePage({ params }: Props) {
   const { locale } = await params;
   const isAr = locale === "ar";
   const wheelchairs = await getFeaturedWheelchairs();
+  const schemas = [
+    buildWebsiteSchema(locale as Locale),
+    buildLocalBusinessSchema(locale as Locale),
+  ];
 
   return (
     <>
-      {/* Inject structured data into <head> via Next.js convention */}
-      <LocalBusinessJsonLd />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(schemas) }}
+      />
 
       <div>
-        {/* ── Hero ─────────────────────────────────────── */}
-        <section className="relative bg-gradient-to-br from-primary-700 via-primary-600 to-primary-500 text-white overflow-hidden">
-          {/* Decorative circles */}
+        <section className="relative overflow-hidden bg-gradient-to-br from-primary-700 via-primary-600 to-primary-500 text-white">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/5 rounded-full" />
-            <div className="absolute -bottom-32 -left-16 w-80 h-80 bg-white/5 rounded-full" />
+            <div className="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-white/5" />
+            <div className="absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-white/5" />
           </div>
 
-          <div className="page-container relative py-24 md:py-32 text-center">
-            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-4 py-1.5 text-sm font-medium mb-6">
+          <div className="page-container relative py-24 text-center md:py-32">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-sm font-medium backdrop-blur">
               <span>🌟</span>
               <span>
                 {isAr
@@ -105,7 +67,7 @@ export default async function HomePage({ params }: Props) {
             </div>
 
             <h1
-              className="text-4xl md:text-6xl font-bold mb-6 leading-tight tracking-tight"
+              className="mb-6 text-4xl font-bold leading-tight tracking-tight md:text-6xl"
               style={{ fontFamily: "var(--font-sora)" }}
             >
               {isAr ? (
@@ -123,22 +85,22 @@ export default async function HomePage({ params }: Props) {
               )}
             </h1>
 
-            <p className="text-lg md:text-xl text-primary-100 mb-10 max-w-2xl mx-auto leading-relaxed">
+            <p className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-primary-100 md:text-xl">
               {isAr
-                ? "احجز كرسيك المتحرك بضغطة زر. تشكيلة واسعة، أسعار تنافسية، وتوصيل سريع."
-                : "Book your wheelchair in minutes. Wide selection, competitive prices, and fast delivery."}
+                ? "احجز كرسيك المتحرك بسرعة مع خيارات يومية وخدمة توصيل واستلام في دبي والإمارات."
+                : "Book your wheelchair in minutes with daily rental options, fast delivery, and pickup across Dubai and the UAE."}
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <div className="flex flex-col justify-center gap-3 sm:flex-row">
               <Link
                 href={`/${locale}/wheelchairs`}
-                className="btn-primary text-base px-8 py-3 bg-white text-primary-700 hover:bg-primary-50"
+                className="btn-primary bg-white px-8 py-3 text-base text-primary-700 hover:bg-primary-50"
               >
                 {isAr ? "تصفح الكراسي" : "Browse Wheelchairs"}
               </Link>
               <Link
                 href={`/${locale}/auth/register`}
-                className="btn-outline text-base px-8 py-3 border-white/40 text-primary-700 hover:bg-white/10 hover:text-black"
+                className="btn-outline border-white/40 px-8 py-3 text-base text-primary-700 hover:bg-white/10 hover:text-black"
               >
                 {isAr ? "إنشاء حساب" : "Get Started Free"}
               </Link>
@@ -146,10 +108,9 @@ export default async function HomePage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── Stats strip ──────────────────────────────── */}
-        <section className="bg-white border-b border-slate-100">
+        <section className="border-b border-slate-100 bg-white">
           <div className="page-container py-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            <div className="grid grid-cols-2 gap-6 text-center md:grid-cols-4">
               {[
                 {
                   value: "500+",
@@ -170,7 +131,7 @@ export default async function HomePage({ params }: Props) {
               ].map((stat) => (
                 <div key={stat.label}>
                   <div
-                    className="text-3xl font-bold text-primary-600 mb-1"
+                    className="mb-1 text-3xl font-bold text-primary-600"
                     style={{ fontFamily: "var(--font-sora)" }}
                   >
                     {stat.value}
@@ -182,23 +143,22 @@ export default async function HomePage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── Featured Wheelchairs ──────────────────────── */}
         <section className="page-container py-16">
-          <div className="flex items-center justify-between mb-8">
+          <div className="mb-8 flex items-center justify-between">
             <h2 className="section-heading">
               {isAr ? "أحدث الكراسي المتاحة" : "Featured Wheelchairs"}
             </h2>
             <Link
               href={`/${locale}/wheelchairs`}
-              className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+              className="text-sm font-medium text-primary-600 hover:text-primary-700"
             >
               {isAr ? "عرض الكل ←" : "View all →"}
             </Link>
           </div>
 
           {wheelchairs.length === 0 ? (
-            <div className="text-center py-16 text-slate-400">
-              <span className="text-5xl block mb-4">♿</span>
+            <div className="py-16 text-center text-slate-400">
+              <span className="mb-4 block text-5xl">♿</span>
               <p>
                 {isAr
                   ? "لا توجد كراسي متاحة حالياً"
@@ -206,288 +166,19 @@ export default async function HomePage({ params }: Props) {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {wheelchairs.map((w, i) => (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {wheelchairs.map((wheelchair, index) => (
                 <WheelchairCard
-                  key={w.id}
-                  wheelchair={w as any}
+                  key={wheelchair.id}
+                  wheelchair={wheelchair as any}
                   locale={locale}
-                  // Task 8: preload first 3 cards (above fold on desktop)
-                  priority={i < 3}
+                  priority={index < 3}
                 />
               ))}
             </div>
           )}
         </section>
-
-        {/* ── How it works ─────────────────────────────── */}
-        <section className="bg-slate-50 border-y border-slate-100 py-16">
-          <div className="page-container">
-            <h2 className="section-heading text-center mb-12">
-              {isAr ? "كيف يعمل WheelRent؟" : "How WheelRent Works"}
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {[
-                {
-                  step: "01",
-                  icon: "🔍",
-                  title: isAr ? "اختر كرسيك" : "Choose Your Chair",
-                  desc: isAr
-                    ? "تصفح مجموعتنا الواسعة واختر المناسب لاحتياجك"
-                    : "Browse our wide selection and pick what fits your needs",
-                },
-                {
-                  step: "02",
-                  icon: "📅",
-                  title: isAr ? "احجز التواريخ" : "Select Your Dates",
-                  desc: isAr
-                    ? "حدد تواريخ الحجز وتحقق من التوافر بشكل فوري"
-                    : "Pick your rental dates and check availability instantly",
-                },
-                {
-                  step: "03",
-                  icon: "🚀",
-                  title: isAr ? "ادفع واستلم" : "Pay & Receive",
-                  desc: isAr
-                    ? "ادفع بأمان عبر بطاقتك وانتظر التوصيل لباب منزلك"
-                    : "Pay securely and get it delivered right to your door",
-                },
-              ].map((item) => (
-                <div key={item.step} className="text-center">
-                  <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-50 rounded-2xl text-3xl mb-4">
-                    {item.icon}
-                  </div>
-                  <div className="text-xs font-bold text-primary-400 mb-1">
-                    {item.step}
-                  </div>
-                  <h3
-                    className="font-semibold text-slate-900 mb-2"
-                    style={{ fontFamily: "var(--font-sora)" }}
-                  >
-                    {item.title}
-                  </h3>
-                  <p className="text-slate-500 text-sm leading-relaxed">
-                    {item.desc}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
       </div>
     </>
   );
 }
-
-// // src/app/[locale]/page.tsx
-// import Link from "next/link";
-// import { prisma } from "@/lib/prisma";
-// import WheelchairCard from "@/components/wheelchair/WheelchairCard";
-
-// interface Props {
-//   params: Promise<{ locale: string }>;
-// }
-
-// async function getFeaturedWheelchairs() {
-//   try {
-//     return await prisma.wheelchair.findMany({
-//       where: { status: "AVAILABLE" },
-//       take: 6,
-//       orderBy: { createdAt: "desc" },
-//     });
-//   } catch (error) {
-//     console.error("[HOME] Failed to load featured wheelchairs", error);
-//     return [];
-//   }
-// }
-
-// export default async function HomePage({ params }: Props) {
-//   const { locale } = await params;
-//   const isAr = locale === "ar";
-//   const wheelchairs = await getFeaturedWheelchairs();
-
-//   return (
-//     <div>
-//       {/* ── Hero ─────────────────────────────────────── */}
-//       <section className="relative bg-gradient-to-br from-primary-700 via-primary-600 to-primary-500 text-white overflow-hidden">
-//         {/* Decorative circles */}
-//         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-//           <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/5 rounded-full" />
-//           <div className="absolute -bottom-32 -left-16 w-80 h-80 bg-white/5 rounded-full" />
-//         </div>
-
-//         <div className="page-container relative py-24 md:py-32 text-center">
-//           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-4 py-1.5 text-sm font-medium mb-6">
-//             <span>🌟</span>
-//             <span>
-//               {isAr
-//                 ? "الخدمة الأولى في المنطقة"
-//                 : "Trusted by 10,000+ customers"}
-//             </span>
-//           </div>
-
-//           <h1
-//             className="text-4xl md:text-6xl font-bold mb-6 leading-tight tracking-tight"
-//             style={{ fontFamily: "var(--font-sora)" }}
-//           >
-//             {isAr ? (
-//               <>
-//                 تأجير كراسي متحركة
-//                 <br />
-//                 <span className="text-primary-200">بكل سهولة ويسر</span>
-//               </>
-//             ) : (
-//               <>
-//                 Wheelchair Rental
-//                 <br />
-//                 <span className="text-primary-200">Made Easy</span>
-//               </>
-//             )}
-//           </h1>
-
-//           <p className="text-lg md:text-xl text-primary-100 mb-10 max-w-2xl mx-auto leading-relaxed">
-//             {isAr
-//               ? "احجز كرسيك المتحرك بضغطة زر. تشكيلة واسعة، أسعار تنافسية، وتوصيل سريع."
-//               : "Book your wheelchair in minutes. Wide selection, competitive prices, and fast delivery."}
-//           </p>
-
-//           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-//             <Link
-//               href={`/${locale}/wheelchairs`}
-//               className="btn-primary text-base px-8 py-3 bg-white text-primary-700 hover:bg-primary-50"
-//             >
-//               {isAr ? "تصفح الكراسي" : "Browse Wheelchairs"}
-//             </Link>
-//             <Link
-//               href={`/${locale}/auth/register`}
-//               className="btn-outline text-base px-8 py-3 border-white/40 text-primary-700 hover:bg-white/10 hover:text-black"
-//             >
-//               {isAr ? "إنشاء حساب" : "Get Started Free"}
-//             </Link>
-//           </div>
-//         </div>
-//       </section>
-
-//       {/* ── Stats strip ──────────────────────────────── */}
-//       <section className="bg-white border-b border-slate-100">
-//         <div className="page-container py-8">
-//           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-//             {[
-//               {
-//                 value: "500+",
-//                 label: isAr ? "كرسي متاح" : "Wheelchairs Available",
-//               },
-//               { value: "10K+", label: isAr ? "عميل سعيد" : "Happy Customers" },
-//               {
-//                 value: "24/7",
-//                 label: isAr ? "دعم متواصل" : "Customer Support",
-//               },
-//               { value: "5★", label: isAr ? "تقييم العملاء" : "Average Rating" },
-//             ].map((stat) => (
-//               <div key={stat.label}>
-//                 <div
-//                   className="text-3xl font-bold text-primary-600 mb-1"
-//                   style={{ fontFamily: "var(--font-sora)" }}
-//                 >
-//                   {stat.value}
-//                 </div>
-//                 <div className="text-sm text-slate-500">{stat.label}</div>
-//               </div>
-//             ))}
-//           </div>
-//         </div>
-//       </section>
-
-//       {/* ── Featured Wheelchairs ──────────────────────── */}
-//       <section className="page-container py-16">
-//         <div className="flex items-center justify-between mb-8">
-//           <h2 className="section-heading">
-//             {isAr ? "أحدث الكراسي المتاحة" : "Featured Wheelchairs"}
-//           </h2>
-//           <Link
-//             href={`/${locale}/wheelchairs`}
-//             className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-//           >
-//             {isAr ? "عرض الكل ←" : "View all →"}
-//           </Link>
-//         </div>
-
-//         {wheelchairs.length === 0 ? (
-//           <div className="text-center py-16 text-slate-400">
-//             <span className="text-5xl block mb-4">♿</span>
-//             <p>
-//               {isAr
-//                 ? "لا توجد كراسي متاحة حالياً"
-//                 : "No wheelchairs available yet."}
-//             </p>
-//           </div>
-//         ) : (
-//           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-//             {wheelchairs.map((w) => (
-//               <WheelchairCard
-//                 key={w.id}
-//                 wheelchair={w as any}
-//                 locale={locale}
-//               />
-//             ))}
-//           </div>
-//         )}
-//       </section>
-
-//       {/* ── How it works ─────────────────────────────── */}
-//       <section className="bg-slate-50 border-y border-slate-100 py-16">
-//         <div className="page-container">
-//           <h2 className="section-heading text-center mb-12">
-//             {isAr ? "كيف يعمل WheelRent؟" : "How WheelRent Works"}
-//           </h2>
-//           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-//             {[
-//               {
-//                 step: "01",
-//                 icon: "🔍",
-//                 title: isAr ? "اختر كرسيك" : "Choose Your Chair",
-//                 desc: isAr
-//                   ? "تصفح مجموعتنا الواسعة واختر المناسب لاحتياجك"
-//                   : "Browse our wide selection and pick what fits your needs",
-//               },
-//               {
-//                 step: "02",
-//                 icon: "📅",
-//                 title: isAr ? "احجز التواريخ" : "Select Your Dates",
-//                 desc: isAr
-//                   ? "حدد تواريخ الحجز وتحقق من التوافر بشكل فوري"
-//                   : "Pick your rental dates and check availability instantly",
-//               },
-//               {
-//                 step: "03",
-//                 icon: "🚀",
-//                 title: isAr ? "ادفع واستلم" : "Pay & Receive",
-//                 desc: isAr
-//                   ? "ادفع بأمان عبر بطاقتك وانتظر التوصيل لباب منزلك"
-//                   : "Pay securely and get it delivered right to your door",
-//               },
-//             ].map((item) => (
-//               <div key={item.step} className="text-center">
-//                 <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-50 rounded-2xl text-3xl mb-4">
-//                   {item.icon}
-//                 </div>
-//                 <div className="text-xs font-bold text-primary-400 mb-1">
-//                   {item.step}
-//                 </div>
-//                 <h3
-//                   className="font-semibold text-slate-900 mb-2"
-//                   style={{ fontFamily: "var(--font-sora)" }}
-//                 >
-//                   {item.title}
-//                 </h3>
-//                 <p className="text-slate-500 text-sm leading-relaxed">
-//                   {item.desc}
-//                 </p>
-//               </div>
-//             ))}
-//           </div>
-//         </div>
-//       </section>
-//     </div>
-//   );
-// }

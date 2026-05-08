@@ -1,5 +1,3 @@
-// src/services/wheelchair.service.ts
-
 import { prisma } from "@/lib/prisma";
 import { differenceInDays, eachDayOfInterval } from "date-fns";
 import type {
@@ -14,6 +12,7 @@ import type {
 } from "@prisma/client";
 import { ACTIVE_BOOKING_STATUSES } from "@/lib/booking-status";
 import { getReservationBlockingWhere } from "@/lib/booking-reservation";
+import { generateUniqueWheelchairSlug } from "@/lib/slug";
 
 export interface WheelchairFilters {
   category?: WheelchairCategory;
@@ -24,7 +23,6 @@ export interface WheelchairFilters {
 }
 
 export class WheelchairService {
-  // ─── List with filters & pagination ───────────────────────
   async list(
     filters: WheelchairFilters = {},
     pagination: PaginationParams = {},
@@ -78,37 +76,61 @@ export class WheelchairService {
     };
   }
 
-  // ─── Get by ID ─────────────────────────────────────────────
   async getById(id: string): Promise<Wheelchair | null> {
     return prisma.wheelchair.findUnique({ where: { id } });
   }
 
-  // ─── Create (admin) ────────────────────────────────────────
+  async getByIdentifier(identifier: string): Promise<Wheelchair | null> {
+    return prisma.wheelchair.findFirst({
+      where: {
+        OR: [{ id: identifier }, { slug: identifier }],
+      },
+    });
+  }
+
   async create(input: CreateWheelchairInput): Promise<Wheelchair> {
-    return prisma.wheelchair.create({ data: input });
+    const slug = await generateUniqueWheelchairSlug(input.name, {
+      category: input.category,
+    });
+
+    return prisma.wheelchair.create({ data: { ...input, slug } });
   }
 
-  // ─── Update (admin) ────────────────────────────────────────
   async update(id: string, input: UpdateWheelchairInput): Promise<Wheelchair> {
-    return prisma.wheelchair.update({ where: { id }, data: input });
+    const existing = await prisma.wheelchair.findUnique({
+      where: { id },
+      select: { slug: true, name: true, category: true },
+    });
+
+    if (!existing) {
+      throw new Error("Wheelchair not found");
+    }
+
+    const slug =
+      existing.slug ??
+      (await generateUniqueWheelchairSlug(input.name ?? existing.name, {
+        category: input.category ?? existing.category,
+        excludeId: id,
+      }));
+
+    return prisma.wheelchair.update({ where: { id }, data: { ...input, slug } });
   }
 
-  // ─── Delete (admin) ────────────────────────────────────────
   async delete(id: string): Promise<void> {
-    // Only delete if no active bookings
     const activeBookings = await prisma.booking.count({
       where: {
         wheelchairId: id,
         status: { in: ACTIVE_BOOKING_STATUSES },
       },
     });
+
     if (activeBookings > 0) {
       throw new Error("Cannot delete wheelchair with active bookings");
     }
+
     await prisma.wheelchair.delete({ where: { id } });
   }
 
-  // ─── Availability ──────────────────────────────────────────
   async getUnavailableDates(wheelchairId: string): Promise<string[]> {
     const bookings = await prisma.booking.findMany({
       where: {
@@ -126,13 +148,12 @@ export class WheelchairService {
         start: booking.startDate,
         end: booking.endDate,
       });
-      unavailableDates.push(...days.map((d) => d.toISOString().split("T")[0]));
+      unavailableDates.push(...days.map((date) => date.toISOString().split("T")[0]));
     }
 
     return [...new Set(unavailableDates)];
   }
 
-  // ─── Check range availability ──────────────────────────────
   async isAvailable(
     wheelchairId: string,
     startDate: Date,
@@ -204,7 +225,7 @@ export class WheelchairService {
       orderBy: { createdAt: "desc" },
     });
 
-    const summaries = await Promise.all(
+    return Promise.all(
       wheelchairs.map(async (wheelchair) => ({
         ...wheelchair,
         inventory: await this.getAvailabilitySummary(
@@ -214,11 +235,8 @@ export class WheelchairService {
         ),
       })),
     );
-
-    return summaries;
   }
 
-  // ─── Calculate price ───────────────────────────────────────
   async calculatePrice(
     wheelchairId: string,
     startDate: Date,
@@ -229,7 +247,9 @@ export class WheelchairService {
       select: { pricePerDay: true },
     });
 
-    if (!wheelchair) throw new Error("Wheelchair not found");
+    if (!wheelchair) {
+      throw new Error("Wheelchair not found");
+    }
 
     const days = Math.max(1, differenceInDays(endDate, startDate));
     const pricePerDay = Number(wheelchair.pricePerDay);

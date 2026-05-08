@@ -40,6 +40,19 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
+  async rewrites() {
+    return [
+      {
+        source: "/sitemap.xml",
+        destination: "/sitemap",
+      },
+      {
+        source: "/sitemaps/:name.xml",
+        destination: "/sitemaps/:name",
+      },
+    ];
+  },
 };
 
 export default withSentryConfig(withNextIntl(nextConfig), {

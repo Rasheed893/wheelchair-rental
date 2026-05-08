@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { buildBaseMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "WheelRent — Wheelchair Rental Service",
-  description: "Affordable wheelchair rental for short and long-term needs",
-};
+export const metadata: Metadata = buildBaseMetadata();
 
 export default function RootLayout({
   children,

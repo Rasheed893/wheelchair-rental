@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
 import PaymentSuccessContent from "@/components/booking/PaymentSuccessContent";
+import { buildNoIndexRobots } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  robots: buildNoIndexRobots(),
+};
 
 export default async function PaymentSuccessPage({
   params,

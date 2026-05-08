@@ -1,5 +1,3 @@
-// src/types/index.ts
-
 import type {
   Wheelchair,
   Booking,
@@ -13,9 +11,6 @@ import type {
 } from "@prisma/client";
 import type { DeliveryCity, DeliveryWindow } from "@/lib/delivery";
 
-// ─────────────────────────────────────────────
-// Re-export Prisma enums for convenience
-// ─────────────────────────────────────────────
 export {
   BookingStatus,
   PaymentStatus,
@@ -24,11 +19,8 @@ export {
   Role,
 };
 
-// ─────────────────────────────────────────────
-// Auth
-// ─────────────────────────────────────────────
 export interface JWTPayload {
-  sub: string; // userId
+  sub: string;
   email: string;
   role: Role;
   name: string;
@@ -48,9 +40,6 @@ export interface LoginResponse {
   token: string;
 }
 
-// ─────────────────────────────────────────────
-// API Response wrappers
-// ─────────────────────────────────────────────
 export interface ApiSuccess<T> {
   success: true;
   data: T;
@@ -65,12 +54,10 @@ export interface ApiError {
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiError;
 
-// ─────────────────────────────────────────────
-// Wheelchair
-// ─────────────────────────────────────────────
 export type WheelchairPublic = Pick<
   Wheelchair,
   | "id"
+  | "slug"
   | "name"
   | "nameAr"
   | "description"
@@ -86,9 +73,6 @@ export type WheelchairPublic = Pick<
   | "maxLoad"
 >;
 
-// ─────────────────────────────────────────────
-// Booking
-// ─────────────────────────────────────────────
 type BookingPaymentFields = {
   phoneNumber: string;
   deliveryAddress: string;
@@ -107,7 +91,7 @@ export type BookingWithRelations = Booking & BookingPaymentFields & {
 
 export interface BookingCreateInput {
   wheelchairId: string;
-  startDate: string; // ISO date string
+  startDate: string;
   endDate: string;
   fullName: string;
   phoneNumber: string;
@@ -120,13 +104,10 @@ export interface BookingCreateInput {
 
 export interface AvailabilityResponse {
   wheelchairId: string;
-  unavailableDates: string[]; // ISO date strings
-  isAvailable: boolean; // for requested range
+  unavailableDates: string[];
+  isAvailable: boolean;
 }
 
-// ─────────────────────────────────────────────
-// Payment
-// ─────────────────────────────────────────────
 export interface CreatePaymentIntentInput {
   bookingId: string;
 }
@@ -138,9 +119,6 @@ export interface PaymentIntentResponse {
   currency: string;
 }
 
-// ─────────────────────────────────────────────
-// Admin Dashboard Stats
-// ─────────────────────────────────────────────
 export interface AdminStats {
   totalBookings: number;
   confirmedBookings: number;
@@ -152,9 +130,6 @@ export interface AdminStats {
   recentBookings: BookingWithRelations[];
 }
 
-// ─────────────────────────────────────────────
-// Pagination
-// ─────────────────────────────────────────────
 export interface PaginatedResponse<T> {
   data: T[];
   total: number;

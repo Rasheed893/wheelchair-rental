@@ -1,27 +1,33 @@
-// src/app/robots.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// Next.js App Router robots — automatically served at /robots.txt
-// ─────────────────────────────────────────────────────────────────────────────
-
 import type { MetadataRoute } from "next";
-import { BASE_URL } from "@/lib/seo";
+import { absoluteUrl, BASE_URL } from "@/lib/seo";
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
         userAgent: "*",
-        allow: "/",
+        allow: ["/", "/en/", "/ar/", "/en/wheelchairs", "/ar/wheelchairs"],
         disallow: [
-          "/*/admin", // Disallow all locale admin routes
-          "/*/dashboard", // User dashboards (private)
-          "/*/payment", // Payment flows (private)
-          "/*/auth", // Auth pages (no SEO value)
-          "/api/", // API routes
+          "/api/",
+          "/admin/",
+          "/dashboard/",
+          "/login/",
+          "/register/",
+          "/checkout/",
+          "/payment-success/",
+          "/preview/",
+          "/en/admin/",
+          "/ar/admin/",
+          "/en/dashboard/",
+          "/ar/dashboard/",
+          "/en/auth/",
+          "/ar/auth/",
+          "/en/payment/",
+          "/ar/payment/",
         ],
       },
     ],
-    sitemap: `${BASE_URL}/sitemap.xml`,
+    sitemap: absoluteUrl("/sitemap.xml"),
     host: BASE_URL,
   };
 }

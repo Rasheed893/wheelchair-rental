@@ -1,6 +1,12 @@
 // src/app/[locale]/payment/cancel/page.tsx
+import type { Metadata } from "next";
 import Link from "next/link";
 import { use } from "react";
+import { buildNoIndexRobots } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  robots: buildNoIndexRobots(),
+};
 
 export default function PaymentCancelPage({
   params,

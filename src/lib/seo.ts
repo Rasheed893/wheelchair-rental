@@ -1,174 +1,300 @@
-// src/lib/seo.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// Central SEO helpers for WheelRent.
-// All metadata generation flows through these functions so values stay
-// consistent across locales, pages, and structured-data blocks.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import type { Metadata } from "next";
+import { defaultLocale, locales, type Locale } from "@/lib/i18n";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+export { defaultLocale, locales };
+export type { Locale };
 
 export const SITE_NAME = "WheelRent";
-export const BASE_URL =
-  process.env.NEXT_PUBLIC_BASE_URL ?? "https://wheelchair-rental.vercel.app";
+export const SITE_SHORT_NAME = "WheelRent";
+export const SITE_DESCRIPTION =
+  "Wheelchair rental across the UAE with fast delivery, pickup, and bilingual support.";
 export const SUPPORT_PHONE =
-  process.env.NEXT_PUBLIC_SUPPORT_PHONE ??
-  process.env.NEXT_PUBLIC_ORDER_PHONE ??
+  process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() ??
+  process.env.NEXT_PUBLIC_ORDER_PHONE?.trim() ??
   "";
 
-export const DEFAULT_OG_IMAGE = `${BASE_URL}/og-default.jpg`; // place a 1200×630 image here
-export const LOCALES = ["en", "ar"] as const;
-export type Locale = (typeof LOCALES)[number];
+const rawBaseUrl =
+  process.env.NEXT_PUBLIC_BASE_URL?.trim() ||
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "") ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+  "http://localhost:3000";
 
-// ── URL helpers ───────────────────────────────────────────────────────────────
+export const BASE_URL = normalizeUrl(rawBaseUrl);
+export const DEFAULT_OG_IMAGE = absoluteUrl("/og-default.jpg");
+export const X_DEFAULT_LOCALE = defaultLocale;
 
-/** Absolute URL for a locale-prefixed path. */
-export function buildUrl(locale: Locale, path = ""): string {
-  const clean = path.startsWith("/") ? path : `/${path}`;
-  return `${BASE_URL}/${locale}${clean}`;
+const HREFLANG_MAP: Record<Locale, string> = {
+  en: "en-AE",
+  ar: "ar-AE",
+};
+
+export function normalizePathname(pathname = "/"): string {
+  const withLeadingSlash = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  const normalized = withLeadingSlash.replace(/\/{2,}/g, "/");
+  if (normalized.length > 1 && normalized.endsWith("/")) {
+    return normalized.slice(0, -1);
+  }
+  return normalized || "/";
 }
 
-/** hreflang alternates for a given path (without locale prefix). */
-export function buildAlternates(
-  path = "",
-): NonNullable<Metadata["alternates"]> {
+export function normalizeUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const protocolMatch = trimmed.match(/^([a-z]+:)?\/\//i);
+  if (!protocolMatch) {
+    return trimmed.replace(/\/{2,}/g, "/");
+  }
+
+  const protocol = protocolMatch[0];
+  const remainder = trimmed.slice(protocol.length).replace(/\/{2,}/g, "/");
+  const normalized = `${protocol}${remainder}`;
+  return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
+}
+
+export function absoluteUrl(pathname = "/"): string {
+  return normalizeUrl(`${BASE_URL}${normalizePathname(pathname)}`);
+}
+
+export function buildLocalizedPath(locale: Locale, pathname = "/"): string {
+  const normalized = normalizePathname(pathname);
+  return normalized === "/"
+    ? normalizePathname(`/${locale}`)
+    : normalizePathname(`/${locale}${normalized}`);
+}
+
+export function buildLocalizedUrl(locale: Locale, pathname = "/"): string {
+  return absoluteUrl(buildLocalizedPath(locale, pathname));
+}
+
+export function buildWheelchairPath(slug: string): string {
+  return normalizePathname(`/wheelchairs/${slug}`);
+}
+
+export function buildWheelchairBookingPath(slug: string): string {
+  return normalizePathname(`/wheelchairs/${slug}/book`);
+}
+
+export function buildLocaleAlternates(pathname = "/") {
+  const languages = Object.fromEntries(
+    locales.map((locale) => [HREFLANG_MAP[locale], buildLocalizedUrl(locale, pathname)]),
+  );
+
   return {
-    canonical: buildUrl("en", path),
+    canonical: buildLocalizedUrl(defaultLocale, pathname),
     languages: {
-      "en-AE": buildUrl("en", path),
-      "ar-AE": buildUrl("ar", path),
+      ...languages,
+      "x-default": buildLocalizedUrl(X_DEFAULT_LOCALE, pathname),
+    },
+  } satisfies NonNullable<Metadata["alternates"]>;
+}
+
+export function buildCanonicalAlternates(locale: Locale, pathname = "/") {
+  const alternates = buildLocaleAlternates(pathname);
+
+  return {
+    ...alternates,
+    canonical: buildLocalizedUrl(locale, pathname),
+  } satisfies NonNullable<Metadata["alternates"]>;
+}
+
+export function buildIndexRobots(): NonNullable<Metadata["robots"]> {
+  return {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
     },
   };
 }
 
-// ── Base / root metadata ──────────────────────────────────────────────────────
+export function buildNoIndexRobots(): NonNullable<Metadata["robots"]> {
+  return {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  };
+}
 
-/**
- * Merged into every locale layout.
- * Individual pages can override any field via generateMetadata().
- */
+export function safeDate(input?: Date | string | null): Date | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  const parsed = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+
+  const now = new Date();
+  return parsed.getTime() > now.getTime() ? now : parsed;
+}
+
+interface SeoPageInput {
+  locale: Locale;
+  pathname?: string;
+  title: string;
+  description: string;
+  image?: string;
+  imageAlt?: string;
+  robots?: NonNullable<Metadata["robots"]>;
+  keywords?: string[];
+  openGraphType?: "website" | "article";
+}
+
+export function buildSeoMetadata({
+  locale,
+  pathname = "/",
+  title,
+  description,
+  image = DEFAULT_OG_IMAGE,
+  imageAlt = title,
+  robots = buildIndexRobots(),
+  keywords,
+  openGraphType = "website",
+}: SeoPageInput): Metadata {
+  const canonicalUrl = buildLocalizedUrl(locale, pathname);
+  const alternates = buildCanonicalAlternates(locale, pathname);
+
+  return {
+    title,
+    description,
+    keywords,
+    alternates,
+    robots,
+    openGraph: {
+      type: openGraphType,
+      siteName: SITE_NAME,
+      locale: locale === "ar" ? "ar_AE" : "en_AE",
+      alternateLocale: locale === "ar" ? ["en_AE"] : ["ar_AE"],
+      url: canonicalUrl,
+      title,
+      description,
+      images: [
+        {
+          url: image,
+          width: 1200,
+          height: 630,
+          alt: imageAlt,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [image],
+    },
+  };
+}
+
 export function buildBaseMetadata(): Metadata {
   return {
     metadataBase: new URL(BASE_URL),
     applicationName: SITE_NAME,
+    title: {
+      default: SITE_NAME,
+      template: `%s | ${SITE_NAME}`,
+    },
+    description: SITE_DESCRIPTION,
     authors: [{ name: SITE_NAME, url: BASE_URL }],
     creator: SITE_NAME,
     publisher: SITE_NAME,
-    robots: {
-      index: true,
-      follow: true,
-      googleBot: { index: true, follow: true },
+    category: "medical equipment rental",
+    alternates: {
+      canonical: buildLocalizedUrl(defaultLocale, "/"),
+      languages: {
+        "x-default": buildLocalizedUrl(defaultLocale, "/"),
+      },
     },
+    robots: buildIndexRobots(),
     openGraph: {
-      siteName: SITE_NAME,
       type: "website",
+      siteName: SITE_NAME,
+      url: BASE_URL,
+      title: SITE_NAME,
+      description: SITE_DESCRIPTION,
+      images: [
+        {
+          url: DEFAULT_OG_IMAGE,
+          width: 1200,
+          height: 630,
+          alt: SITE_NAME,
+        },
+      ],
       locale: "en_AE",
-      alternateLocale: "ar_AE",
+      alternateLocale: ["ar_AE"],
     },
     twitter: {
       card: "summary_large_image",
-      site: "@WheelRentUAE", // update if you have a Twitter handle
+      title: SITE_NAME,
+      description: SITE_DESCRIPTION,
+      images: [DEFAULT_OG_IMAGE],
     },
   };
 }
-
-// ── Homepage metadata ─────────────────────────────────────────────────────────
 
 export function buildHomeMetadata(locale: Locale): Metadata {
   const isAr = locale === "ar";
-  const path = "";
 
-  const title = isAr
-    ? "تأجير كراسي متحركة في الإمارات | WheelRent"
-    : "Wheelchair Rental UAE, Dubai | Delivery & Pickup | WheelRent";
-
-  const description = isAr
-    ? "اكتشف أفضل خدمة تأجير كراسي متحركة في الإمارات. توصيل سريع، أسعار بالدرهم، وتشكيلة واسعة تشمل الكراسي العادية والكهربائية وكراسي الأطفال."
-    : "Rent a wheelchair in UAE with fast delivery & pickup. Wide range of standard, electric, pediatric, and bariatric wheelchairs. AED pricing, free cancellation.";
-
-  return {
-    title,
-    description,
+  return buildSeoMetadata({
+    locale,
+    pathname: "/",
+    title: isAr
+      ? "تأجير كراسي متحركة في الإمارات مع التوصيل | WheelRent"
+      : "Wheelchair Rental UAE with Fast Delivery | WheelRent",
+    description: isAr
+      ? "استأجر كرسياً متحركاً في دبي والإمارات مع توصيل سريع وخدمة باللغة العربية والإنجليزية وخيارات عادية وكهربائية وأطفال."
+      : "Rent wheelchairs across Dubai and the UAE with fast delivery, pickup, Arabic and English support, and standard, electric, pediatric, and bariatric options.",
     keywords: isAr
-      ? ["تأجير كرسي متحرك", "كرسي متحرك الإمارات", "كرسي متحرك دبي"]
-      : [
-          "wheelchair rental UAE",
-          "wheelchair rental Dubai",
-          "portable wheelchair",
-          "lightweight wheelchair",
-          "hospital wheelchair",
-          "electric wheelchair rental",
-          "mobility aid rental",
-        ],
-    alternates: buildAlternates(path),
-    openGraph: {
-      title,
-      description,
-      url: buildUrl(locale, path),
-      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: title }],
-    },
-    twitter: {
-      title,
-      description,
-      images: [DEFAULT_OG_IMAGE],
-    },
-  };
+      ? ["تأجير كرسي متحرك", "كرسي متحرك دبي", "تأجير كراسي متحركة الإمارات"]
+      : ["wheelchair rental UAE", "wheelchair rental Dubai", "mobility aid rental"],
+  });
 }
 
-// ── Listing page metadata ─────────────────────────────────────────────────────
-
-export function buildListingMetadata(locale: Locale): Metadata {
+export function buildListingMetadata(
+  locale: Locale,
+  options?: { noIndex?: boolean },
+): Metadata {
   const isAr = locale === "ar";
-  const path = "/wheelchairs";
 
-  const title = isAr
-    ? "تصفح الكراسي المتحركة | WheelRent الإمارات"
-    : "Wheelchair Rental in UAE | Affordable Mobility | WheelRent";
-
-  const description = isAr
-    ? "اختر من بين مئات الكراسي المتحركة المتاحة للإيجار في الإمارات. كراسي عادية، كهربائية، للأطفال، وثقيلة الوزن — بأسعار يومية بالدرهم."
-    : "Browse hundreds of wheelchairs available for rent across the UAE. Standard, electric, pediatric, bariatric & transport chairs. Affordable AED daily rates with home delivery.";
-
-  return {
-    title,
-    description,
+  return buildSeoMetadata({
+    locale,
+    pathname: "/wheelchairs",
+    title: isAr
+      ? "تصفح الكراسي المتحركة للإيجار | WheelRent الإمارات"
+      : "Browse Wheelchairs for Rent in UAE | WheelRent",
+    description: isAr
+      ? "تصفح الكراسي المتحركة المتاحة للإيجار في الإمارات مع أسعار يومية وخيارات كهربائية وعادية وخدمة توصيل واستلام."
+      : "Browse available wheelchairs for rent across the UAE with daily pricing, electric and standard models, and delivery and pickup support.",
+    robots: options?.noIndex ? buildNoIndexRobots() : buildIndexRobots(),
     keywords: isAr
-      ? ["كراسي متحركة للإيجار", "كرسي كهربائي", "كرسي أطفال"]
-      : [
-          "wheelchair rental",
-          "portable wheelchair UAE",
-          "lightweight wheelchair",
-          "hospital wheelchair rental",
-          "bariatric wheelchair",
-          "pediatric wheelchair",
-          "electric wheelchair UAE",
-          "mobility equipment rental",
-        ],
-    alternates: buildAlternates(path),
-    openGraph: {
-      title,
-      description,
-      url: buildUrl(locale, path),
-      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: title }],
-    },
-    twitter: {
-      title,
-      description,
-      images: [DEFAULT_OG_IMAGE],
-    },
-  };
+      ? ["كرسي متحرك للإيجار", "كرسي كهربائي", "تأجير معدات طبية"]
+      : ["wheelchair rental", "electric wheelchair rental", "medical equipment rental"],
+  });
 }
-
-// ── Product page metadata ─────────────────────────────────────────────────────
 
 interface WheelchairSeoData {
   id: string;
+  slug: string;
   name: string;
   nameAr: string;
-  description: string | null;
-  descriptionAr: string | null;
-  pricePerDay: number | string; // Prisma Decimal comes as string
+  description: string;
+  descriptionAr: string;
+  pricePerDay: number | string;
   images: string[];
   category: string;
   status: string;
@@ -179,50 +305,21 @@ export function buildProductMetadata(
   locale: Locale,
 ): Metadata {
   const isAr = locale === "ar";
-  const path = `/wheelchairs/${wheelchair.id}`;
-
   const name = isAr ? wheelchair.nameAr : wheelchair.name;
-  const rawDesc = isAr ? wheelchair.descriptionAr : wheelchair.description;
-  const price = Number(wheelchair.pricePerDay).toFixed(0);
-  const ogImage = wheelchair.images?.[0] ?? DEFAULT_OG_IMAGE;
+  const description = isAr ? wheelchair.descriptionAr : wheelchair.description;
+  const priceLabel = Number(wheelchair.pricePerDay).toFixed(0);
+  const image = wheelchair.images[0] || DEFAULT_OG_IMAGE;
 
-  const title = isAr
-    ? `${name} – ${price} درهم/يوم | WheelRent`
-    : `${name} – AED ${price}/day | WheelRent`;
-
-  const description = isAr
-    ? `استأجر ${name} بـ ${price} درهم يومياً. ${rawDesc ?? ""} توصيل سريع في الإمارات.`.trim()
-    : `Rent the ${name} for AED ${price}/day. ${rawDesc ?? ""} Fast delivery across UAE.`.trim();
-
-  return {
-    title,
-    description,
-    alternates: {
-      canonical: buildUrl(locale, path),
-      languages: {
-        "en-AE": buildUrl("en", path),
-        "ar-AE": buildUrl("ar", path),
-      },
-    },
-    openGraph: {
-      title,
-      description,
-      url: buildUrl(locale, path),
-      type: "website", // Next.js Metadata type; for rich results we use JSON-LD "Product"
-      images: [
-        {
-          url: ogImage,
-          width: 800,
-          height: 600,
-          alt: `${name} – wheelchair rental UAE`,
-        },
-      ],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-      images: [ogImage],
-    },
-  };
+  return buildSeoMetadata({
+    locale,
+    pathname: buildWheelchairPath(wheelchair.slug),
+    title: isAr
+      ? `${name} للإيجار | ${priceLabel} درهم يومياً`
+      : `${name} for Rent | AED ${priceLabel}/day`,
+    description: isAr
+      ? `${description} متاح للإيجار اليومي مع التوصيل في الإمارات.`
+      : `${description} Available for daily rental with delivery across the UAE.`,
+    image,
+    imageAlt: name,
+  });
 }

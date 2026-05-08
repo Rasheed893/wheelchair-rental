@@ -26,6 +26,7 @@ import {
   getDeliveryFee,
   PAID_DELIVERY_CITIES,
 } from "@/lib/delivery";
+import { buildWheelchairBookingPath } from "@/lib/seo";
 
 const stripePublishableKey =
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
@@ -35,6 +36,7 @@ const stripePromise = stripePublishableKey
 
 interface WheelchairInfo {
   id: string;
+  slug?: string | null;
   name: string;
   nameAr: string;
   pricePerDay: number;
@@ -69,9 +71,9 @@ function PaymentForm({
       setLoading(false);
       return;
     }
+
     const { error: submitError } = await stripe.confirmPayment({
       elements,
-      // clientSecret,
       confirmParams: {
         return_url: `${window.location.origin}/${locale}/payment/success?bookingId=${bookingId}`,
       },
@@ -130,6 +132,16 @@ export default function BookPage({
   const [deliveryWindow, setDeliveryWindow] = useState<
     (typeof DELIVERY_WINDOWS)[number]
   >("MORNING");
+  const [bookingPaymentStatus, setBookingPaymentStatus] = useState<
+    "PENDING" | "PAID" | "EXPIRED" | null
+  >(null);
+  const [customerName, setCustomerName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryNotes, setDeliveryNotes] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "CASH">(
+    "ONLINE",
+  );
 
   const days = useMemo(() => {
     if (!dateRange?.from || !dateRange?.to) {
@@ -150,6 +162,10 @@ export default function BookPage({
     Number(activePricePerDay),
     activeDeliveryFee,
   );
+
+  const bookingPath = wheelchair?.slug
+    ? buildWheelchairBookingPath(wheelchair.slug)
+    : `/wheelchairs/${id}/book`;
 
   const initializePayment = useCallback(
     async (targetBookingId: string, mode: "initial" | "retry" = "initial") => {
@@ -176,9 +192,7 @@ export default function BookPage({
         setBookingId(targetBookingId);
         setClientSecret(data.data.clientSecret);
         setStep("payment");
-        router.replace(
-          `/${locale}/wheelchairs/${id}/book?bookingId=${targetBookingId}`,
-        );
+        router.replace(`/${locale}${bookingPath}?bookingId=${targetBookingId}`);
       } catch (paymentError) {
         setClientSecret(null);
         setStep("payment");
@@ -191,7 +205,7 @@ export default function BookPage({
         setLoading(false);
       }
     },
-    [id, locale, router],
+    [bookingPath, locale, router],
   );
 
   useEffect(() => {
@@ -214,21 +228,19 @@ export default function BookPage({
   }, [id]);
 
   useEffect(() => {
+    if (!wheelchair?.slug || wheelchair.slug === id) {
+      return;
+    }
+
+    const query = bookingId ? `?bookingId=${bookingId}` : "";
+    router.replace(`/${locale}${buildWheelchairBookingPath(wheelchair.slug)}${query}`);
+  }, [bookingId, id, locale, router, wheelchair?.slug]);
+
+  useEffect(() => {
     if (bookingId && !clientSecret) {
       void initializePayment(bookingId, "retry");
     }
   }, [bookingId, clientSecret, initializePayment]);
-
-  const [bookingPaymentStatus, setBookingPaymentStatus] = useState<
-    "PENDING" | "PAID" | "EXPIRED" | null
-  >(null);
-  const [customerName, setCustomerName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [deliveryNotes, setDeliveryNotes] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "CASH">(
-    "ONLINE",
-  );
 
   useEffect(() => {
     if (bookingIdState) {
@@ -248,10 +260,10 @@ export default function BookPage({
   }, [bookingIdState]);
 
   async function handleCreateBooking() {
-    const wheelchairId = id?.trim();
+    const wheelchairId = wheelchair?.id?.trim();
 
     if (!wheelchairId) {
-      setError("Invalid wheelchair ID");
+      setError("Invalid wheelchair");
       return;
     }
 
@@ -271,7 +283,6 @@ export default function BookPage({
       setError("Delivery address is required");
       return;
     }
-
     if (dateRange.from >= dateRange.to) {
       setError("End date must be after start date");
       return;
@@ -315,12 +326,12 @@ export default function BookPage({
 
       const newBookingId = bookingData.data.id;
       setBookingId(newBookingId);
+
       if (paymentMethod === "CASH") {
-        router.push(
-          `/${locale}/payment/success?bookingId=${newBookingId}&method=CASH`,
-        );
+        router.push(`/${locale}/payment/success?bookingId=${newBookingId}&method=CASH`);
         return;
       }
+
       await initializePayment(newBookingId, "initial");
     } catch (bookingError) {
       setError(
@@ -490,7 +501,6 @@ export default function BookPage({
                   Payment Details
                 </h2>
 
-                {/* If booking is already confirmed, show success instead of Stripe */}
                 {bookingIsPaid ? (
                   <div className="py-8 text-center">
                     <div className="mb-4 text-4xl text-green-500">✅</div>
@@ -517,9 +527,7 @@ export default function BookPage({
                       booking.
                     </p>
                     <button
-                      onClick={() =>
-                        router.push(`/${locale}/wheelchairs/${id}/book`)
-                      }
+                      onClick={() => router.push(`/${locale}${bookingPath}`)}
                       className="btn-outline w-full justify-center"
                     >
                       Start New Booking
@@ -543,7 +551,6 @@ export default function BookPage({
                         ? "Loading payment form..."
                         : "Payment is not initialized yet."}
                     </p>
-                    {/* ... keep your existing retry button ... */}
                   </div>
                 )}
               </div>
@@ -597,23 +604,7 @@ export default function BookPage({
                   <hr className="my-2 border-slate-100" />
                   <div className="flex justify-between text-base font-bold">
                     <span>Total</span>
-                    <span className="text-primary-700">
-                      {formatAED(total)}
-                    </span>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-                    <p>
-                      Delivery city:{" "}
-                      <span className="font-medium text-slate-700">
-                        {formatDeliveryCity(deliveryCity)}
-                      </span>
-                    </p>
-                    <p className="mt-1">
-                      Delivery window:{" "}
-                      <span className="font-medium text-slate-700">
-                        {formatDeliveryWindow(deliveryWindow)}
-                      </span>
-                    </p>
+                    <span className="text-primary-700">{formatAED(total)}</span>
                   </div>
                 </div>
               ) : existingBooking ? (
@@ -652,23 +643,7 @@ export default function BookPage({
                   <hr className="my-2 border-slate-100" />
                   <div className="flex justify-between text-base font-bold">
                     <span>Total</span>
-                    <span className="text-primary-700">
-                      {formatAED(total)}
-                    </span>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-                    <p>
-                      Delivery city:{" "}
-                      <span className="font-medium text-slate-700">
-                        {formatDeliveryCity(existingBooking.deliveryCity)}
-                      </span>
-                    </p>
-                    <p className="mt-1">
-                      Delivery window:{" "}
-                      <span className="font-medium text-slate-700">
-                        {formatDeliveryWindow(existingBooking.deliveryWindow)}
-                      </span>
-                    </p>
+                    <span className="text-primary-700">{formatAED(total)}</span>
                   </div>
                 </div>
               ) : (

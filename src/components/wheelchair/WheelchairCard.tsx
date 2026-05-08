@@ -1,26 +1,12 @@
-// src/components/wheelchair/WheelchairCard.tsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Task 7 & 8 improvements:
-//  • SEO-enriched alt text: "{name} – {category} wheelchair rental UAE"
-//  • Explicit sizes attribute to prevent downloading oversized images
-//  • priority prop supported for above-the-fold cards (e.g. first 3 on homepage)
-//  • Component stays a server component — no "use client" needed here
-// ─────────────────────────────────────────────────────────────────────────────
-
-import Link from "next/link";
 import Image from "next/image";
+import Link from "next/link";
 import type { WheelchairPublic } from "@/types";
 import { formatAED } from "@/lib/currency";
-import { Span } from "next/dist/trace";
+import { buildWheelchairPath } from "@/lib/seo";
 
 interface Props {
   wheelchair: WheelchairPublic;
   locale: string;
-  /**
-   * Set to true for cards in the first visible row (above the fold).
-   * Tells Next.js to preload the image, improving LCP on list pages.
-   * Default: false (lazy load everything else).
-   */
   priority?: boolean;
 }
 
@@ -32,14 +18,14 @@ const CATEGORY_LABELS: Record<string, { en: string; ar: string }> = {
   TRANSPORT: { en: "Transport", ar: "نقل" },
 };
 
-// ── SEO alt text ──────────────────────────────────────────────────────────────
-// Encodes the product name + category + UAE keyword for image search signals.
 function buildAlt(name: string, category: string, locale: string): string {
   const isAr = locale === "ar";
-  const catLabel = CATEGORY_LABELS[category]?.[isAr ? "ar" : "en"] ?? category;
+  const categoryLabel =
+    CATEGORY_LABELS[category]?.[isAr ? "ar" : "en"] ?? category;
+
   return isAr
-    ? `${name} – تأجير كرسي متحرك ${catLabel} في الإمارات`
-    : `${name} – ${catLabel} wheelchair rental UAE`;
+    ? `${name} - تأجير كرسي متحرك ${categoryLabel} في الإمارات`
+    : `${name} - ${categoryLabel} wheelchair rental UAE`;
 }
 
 export default function WheelchairCard({
@@ -53,90 +39,85 @@ export default function WheelchairCard({
   const categoryLabel =
     CATEGORY_LABELS[wheelchair.category]?.[isAr ? "ar" : "en"] ??
     wheelchair.category;
+  const publicPath = buildWheelchairPath(wheelchair.slug ?? wheelchair.id);
 
   return (
-    <div className="card overflow-hidden hover:shadow-md transition-shadow duration-200 group animate-fade-in">
-      {/* ── Image ─────────────────────────────────────────────────────────── */}
-      <div className="relative aspect-[4/3] bg-slate-100 overflow-hidden">
+    <div className="group card animate-fade-in overflow-hidden transition-shadow duration-200 hover:shadow-md">
+      <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
         {wheelchair.images?.[0] ? (
           <Image
             src={wheelchair.images[0]}
-            // Task 7: keyword-rich alt text
             alt={buildAlt(name, wheelchair.category, locale)}
             fill
-            // Task 7: precise sizes prevent fetching a 1200px image for a 300px card
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 280px"
-            // Task 8: priority=true only for above-the-fold cards, rest lazy-load
             priority={priority}
             loading={priority ? undefined : "lazy"}
-            className="object-cover group-hover:scale-105 transition-transform duration-300"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
           <div
-            className="flex items-center justify-center h-full text-5xl text-slate-300"
-            aria-label={`${name} – no image available`}
+            className="flex h-full items-center justify-center text-5xl text-slate-300"
+            aria-label={`${name} - no image available`}
             role="img"
           >
             ♿
           </div>
         )}
-        {/* Category badge */}
-        <div className="absolute top-3 left-3">
-          <span className="badge bg-white/90 backdrop-blur text-slate-700 text-xs shadow-sm">
+
+        <div className="absolute left-3 top-3">
+          <span className="badge bg-white/90 text-xs text-slate-700 shadow-sm backdrop-blur">
             {categoryLabel}
           </span>
         </div>
       </div>
 
-      {/* ── Content ───────────────────────────────────────────────────────── */}
       <div className="p-5">
         <h3
-          className="font-semibold text-slate-900 text-base mb-1 line-clamp-1"
+          className="mb-1 line-clamp-1 text-base font-semibold text-slate-900"
           style={{ fontFamily: "var(--font-sora)" }}
         >
           {name}
         </h3>
-        <p className="text-slate-500 text-sm mb-4 line-clamp-2 leading-relaxed">
+        <p className="mb-4 line-clamp-2 text-sm leading-relaxed text-slate-500">
           {description}
         </p>
 
-        {/* Features */}
         {wheelchair.features?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-4">
+          <div className="mb-4 flex flex-wrap gap-1.5">
             {(isAr ? wheelchair.featuresAr : wheelchair.features)
               .slice(0, 3)
-              .map((f, i) => (
+              .map((feature, index) => (
                 <span
-                  key={i}
-                  className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full"
+                  key={`${feature}-${index}`}
+                  className="rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary-700"
                 >
-                  {f}
+                  {feature}
                 </span>
               ))}
           </div>
         )}
 
-        {/* Price + CTA */}
-        <div className="flex items-center justify-between mt-auto">
+        <div className="mt-auto flex items-center justify-between">
           <div>
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-bold text-slate-900">
                 {formatAED(Number(wheelchair.pricePerDay))}
               </span>
-              <span className="text-slate-400 text-sm">
+              <span className="text-sm text-slate-400">
                 /{isAr ? "يوم" : "day"}
               </span>
             </div>
-            <p className="text-xs text-emerald-600 mt-0.5">
+            <p className="mt-0.5 text-xs text-emerald-600">
               🚚 {isAr ? "يشمل التوصيل" : "Incl. delivery"}
             </p>
           </div>
+
           <Link
-            href={`/${locale}/wheelchairs/${wheelchair.id}`}
-            className="btn-primary py-2 px-4 text-sm"
+            href={`/${locale}${publicPath}`}
+            className="btn-primary px-4 py-2 text-sm"
             aria-label={
               isAr
-                ? `احجز ${name} بـ ${formatAED(Number(wheelchair.pricePerDay))} يومياً`
+                ? `احجز ${name} بسعر ${formatAED(Number(wheelchair.pricePerDay))} يومياً`
                 : `Book ${name} for ${formatAED(Number(wheelchair.pricePerDay))}/day`
             }
           >

@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { buildNoIndexRobots } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  robots: buildNoIndexRobots(),
+};
 
 interface Props {
   children: ReactNode;

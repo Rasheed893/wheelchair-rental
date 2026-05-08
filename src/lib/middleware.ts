@@ -5,17 +5,17 @@ import { prisma } from "./prisma";
 import { logger } from "./logger";
 
 type RouteParams = Record<string, string>;
-type RouteContext = { params: RouteParams; user: AuthUser };
-type NextRouteContext = { params: Promise<RouteParams> };
+type AuthorizedRouteContext = { params: RouteParams; user: AuthUser };
+type AsyncRouteParamsContext = { params: Promise<RouteParams> };
 type RouteHandler = (
   req: NextRequest,
-  context: RouteContext,
+  context: AuthorizedRouteContext,
 ) => Promise<NextResponse>;
 
 export function withAuth(handler: RouteHandler, allowedRoles?: Role[]) {
   return async (
     req: NextRequest,
-    context: NextRouteContext,
+    context: AsyncRouteParamsContext,
   ): Promise<NextResponse> => {
     const token = req.cookies.get(COOKIE_NAME)?.value;
     const pathname = req.nextUrl.pathname;

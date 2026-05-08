@@ -109,6 +109,7 @@ model User {
 
 model Wheelchair {
   id            String             @id @default(cuid())
+  slug          String?            @unique
   name          String
   nameAr        String             // Arabic name
   description   String
@@ -132,6 +133,7 @@ model Wheelchair {
   @@index([status])
   @@index([category])
   @@index([pricePerDay])
+  @@index([slug])
   @@map("wheelchairs")
 }
 

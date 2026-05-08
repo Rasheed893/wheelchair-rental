@@ -1,3 +1,4 @@
+import { revalidatePath, revalidateTag } from "next/cache";
 import { NextRequest } from "next/server";
 import {
   withAdminAuth,
@@ -14,13 +15,12 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function GET(_req: NextRequest, { params }: Ctx) {
   try {
     const { id } = await params;
-    const wheelchair = await wheelchairService.getById(id);
+    const wheelchair = await wheelchairService.getByIdentifier(id);
 
     if (!wheelchair) {
       return notFound("Wheelchair");
     }
 
-    // ✅ Tell Vercel edge never to cache this response
     const response = ok(wheelchair);
     response.headers.set("Cache-Control", "no-store");
     return response;
@@ -28,8 +28,6 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     return serverError(error);
   }
 }
-
-import { revalidatePath } from "next/cache";
 
 export const PUT = withAdminAuth(async (req, { params }) => {
   try {
@@ -44,12 +42,16 @@ export const PUT = withAdminAuth(async (req, { params }) => {
     }
 
     const wheelchair = await wheelchairService.update(params.id, parsed.data);
+    const publicPath = wheelchair.slug
+      ? `/wheelchairs/${wheelchair.slug}`
+      : `/wheelchairs/${wheelchair.id}`;
 
-    // ✅ Bust the static detail page cache for both locales
-    revalidatePath(`/en/wheelchairs/${params.id}`);
-    revalidatePath(`/ar/wheelchairs/${params.id}`);
-    revalidatePath(`/en/wheelchairs`);
-    revalidatePath(`/ar/wheelchairs`);
+    revalidatePath(`/en${publicPath}`, "page");
+    revalidatePath(`/ar${publicPath}`, "page");
+    revalidatePath("/en/wheelchairs", "page");
+    revalidatePath("/ar/wheelchairs", "page");
+    revalidateTag("wheelchairs", "max");
+    revalidateTag("seo", "max");
 
     return ok(wheelchair);
   } catch (error) {
@@ -60,6 +62,10 @@ export const PUT = withAdminAuth(async (req, { params }) => {
 export const DELETE = withAdminAuth(async (_req, { params }) => {
   try {
     await wheelchairService.delete(params.id);
+    revalidatePath("/en/wheelchairs", "page");
+    revalidatePath("/ar/wheelchairs", "page");
+    revalidateTag("wheelchairs", "max");
+    revalidateTag("seo", "max");
     return ok(null, "Wheelchair deleted");
   } catch (error) {
     if (error instanceof Error) {
