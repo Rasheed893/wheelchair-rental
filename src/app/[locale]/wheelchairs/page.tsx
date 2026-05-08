@@ -9,6 +9,7 @@ interface Props {
   params: Promise<{ locale: string }>;
   searchParams?: Promise<{ category?: string; search?: string; page?: string }>;
 }
+export const revalidate = 3600;
 
 export async function generateMetadata({
   params,
@@ -18,8 +19,8 @@ export async function generateMetadata({
   const resolvedSearchParams = await searchParams;
   const noIndex = Boolean(
     resolvedSearchParams?.category ||
-      resolvedSearchParams?.search ||
-      (resolvedSearchParams?.page && resolvedSearchParams.page !== "1"),
+    resolvedSearchParams?.search ||
+    (resolvedSearchParams?.page && resolvedSearchParams.page !== "1"),
   );
 
   return buildListingMetadata(locale as Locale, { noIndex });
@@ -130,7 +131,9 @@ export default async function WheelchairsPage({ params, searchParams }: Props) {
       {wheelchairs.length === 0 ? (
         <div className="py-24 text-center text-slate-400">
           <span className="mb-4 block text-6xl">🔍</span>
-          <p className="text-lg">{isAr ? "لا توجد نتائج" : "No wheelchairs found"}</p>
+          <p className="text-lg">
+            {isAr ? "لا توجد نتائج" : "No wheelchairs found"}
+          </p>
           <a
             href={`/${locale}/wheelchairs`}
             className="mt-2 inline-block text-sm text-primary-600 hover:underline"
@@ -153,19 +156,21 @@ export default async function WheelchairsPage({ params, searchParams }: Props) {
 
       {totalPages > 1 && (
         <div className="mt-12 flex justify-center gap-2">
-          {Array.from({ length: totalPages }, (_, index) => index + 1).map((p) => (
-            <a
-              key={p}
-              href={`/${locale}/wheelchairs?${new URLSearchParams({ ...(resolvedSearchParams || {}), page: String(p) })}`}
-              className={`flex h-10 w-10 items-center justify-center rounded-xl border text-sm font-medium transition-colors ${
-                p === page
-                  ? "border-primary-600 bg-primary-600 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-primary-300"
-              }`}
-            >
-              {p}
-            </a>
-          ))}
+          {Array.from({ length: totalPages }, (_, index) => index + 1).map(
+            (p) => (
+              <a
+                key={p}
+                href={`/${locale}/wheelchairs?${new URLSearchParams({ ...(resolvedSearchParams || {}), page: String(p) })}`}
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border text-sm font-medium transition-colors ${
+                  p === page
+                    ? "border-primary-600 bg-primary-600 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-primary-300"
+                }`}
+              >
+                {p}
+              </a>
+            ),
+          )}
         </div>
       )}
     </div>

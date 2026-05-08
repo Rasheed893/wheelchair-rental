@@ -1,5 +1,6 @@
 import { revalidatePath, revalidateTag } from "next/cache";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+
 import {
   withAdminAuth,
   ok,
@@ -32,8 +33,34 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 export const PUT = withAdminAuth(async (req, { params }) => {
   try {
     const body = await req.json();
-    const parsed = updateWheelchairSchema.safeParse(body);
 
+    // Optimistic lock: client must send the updatedAt it last saw
+    const { updatedAt: clientUpdatedAt, ...rest } = body;
+
+    if (!clientUpdatedAt) {
+      return badRequest("Missing updatedAt for conflict detection");
+    }
+
+    // Check for concurrent edit before validating the rest
+    const current = await wheelchairService.getByIdentifier(params.id);
+    if (!current) return notFound("Wheelchair");
+
+    const serverUpdatedAt = new Date(current.updatedAt).toISOString();
+    const clientTimestamp = new Date(clientUpdatedAt).toISOString();
+
+    if (serverUpdatedAt !== clientTimestamp) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "This record was modified by someone else. Please refresh and try again.",
+          code: "CONFLICT",
+        },
+        { status: 409 },
+      );
+    }
+
+    const parsed = updateWheelchairSchema.safeParse(rest);
     if (!parsed.success) {
       return badRequest(
         "Validation failed",
@@ -50,8 +77,8 @@ export const PUT = withAdminAuth(async (req, { params }) => {
     revalidatePath(`/ar${publicPath}`, "page");
     revalidatePath("/en/wheelchairs", "page");
     revalidatePath("/ar/wheelchairs", "page");
-    revalidateTag("wheelchairs", "max");
-    revalidateTag("seo", "max");
+    revalidateTag("wheelchairs", "page");
+    revalidateTag("seo", "page");
 
     return ok(wheelchair);
   } catch (error) {
@@ -61,17 +88,25 @@ export const PUT = withAdminAuth(async (req, { params }) => {
 
 export const DELETE = withAdminAuth(async (_req, { params }) => {
   try {
+    const wheelchair = await wheelchairService.getByIdentifier(params.id);
+    if (!wheelchair) return notFound("Wheelchair");
+
+    const publicPath = wheelchair.slug
+      ? `/wheelchairs/${wheelchair.slug}`
+      : `/wheelchairs/${wheelchair.id}`;
+
     await wheelchairService.delete(params.id);
+
+    revalidatePath(`/en${publicPath}`, "page");
+    revalidatePath(`/ar${publicPath}`, "page");
     revalidatePath("/en/wheelchairs", "page");
     revalidatePath("/ar/wheelchairs", "page");
-    revalidateTag("wheelchairs", "max");
-    revalidateTag("seo", "max");
+    revalidateTag("wheelchairs", "page");
+    revalidateTag("seo", "page");
+
     return ok(null, "Wheelchair deleted");
   } catch (error) {
-    if (error instanceof Error) {
-      return badRequest(error.message);
-    }
-
+    if (error instanceof Error) return badRequest(error.message);
     return serverError(error);
   }
 });

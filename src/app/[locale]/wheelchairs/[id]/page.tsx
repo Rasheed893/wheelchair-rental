@@ -16,7 +16,9 @@ import {
 } from "@/lib/structured-data";
 import { getPublicWheelchairByIdentifier } from "@/lib/wheelchair-public";
 
-export const revalidate = 3600;
+// export const revalidate = 3600;
+export const dynamic = "force-static";
+export const dynamicParams = false;
 
 interface Props {
   params: Promise<{ locale: string; id: string }>;
@@ -129,7 +131,10 @@ export default async function WheelchairDetailPage({ params }: Props) {
             {isAr ? "الرئيسية" : "Home"}
           </Link>
           <span>/</span>
-          <Link href={`/${locale}/wheelchairs`} className="hover:text-primary-600">
+          <Link
+            href={`/${locale}/wheelchairs`}
+            className="hover:text-primary-600"
+          >
             {isAr ? "الكراسي" : "Wheelchairs"}
           </Link>
           <span>/</span>

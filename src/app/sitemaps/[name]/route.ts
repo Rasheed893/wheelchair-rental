@@ -9,6 +9,11 @@ import {
 type Context = {
   params: Promise<{ name: string }>;
 };
+export async function generateStaticParams() {
+  return [{ name: "pages" }, { name: "wheelchairs" }];
+}
+
+export const revalidate = 3600;
 
 export async function GET(_request: Request, { params }: Context) {
   const { name } = await params;

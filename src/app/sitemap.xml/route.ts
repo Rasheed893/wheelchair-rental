@@ -1,4 +1,8 @@
-import { getSitemapIndexEntries, renderSitemapIndex, xmlResponse } from "@/lib/sitemap";
+import {
+  getSitemapIndexEntries,
+  renderSitemapIndex,
+  xmlResponse,
+} from "@/lib/sitemap";
 
 export async function GET() {
   const entries = await getSitemapIndexEntries();

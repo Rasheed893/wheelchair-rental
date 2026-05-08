@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 import WheelchairCard from "@/components/wheelchair/WheelchairCard";
 import { buildHomeMetadata, type Locale } from "@/lib/seo";
 import { backfillMissingWheelchairSlugs } from "@/lib/slug";
@@ -10,6 +11,11 @@ import {
   serializeJsonLd,
 } from "@/lib/structured-data";
 
+export const revalidate = 3600;
+
+export async function generateStaticParams() {
+  return [{ locale: "en" }, { locale: "ar" }];
+}
 interface Props {
   params: Promise<{ locale: string }>;
 }
@@ -19,20 +25,23 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return buildHomeMetadata(locale as Locale);
 }
 
-async function getFeaturedWheelchairs() {
-  try {
-    await backfillMissingWheelchairSlugs();
-    return await prisma.wheelchair.findMany({
-      where: { status: "AVAILABLE" },
-      take: 6,
-      orderBy: { createdAt: "desc" },
-    });
-  } catch (error) {
-    console.error("[HOME] Failed to load featured wheelchairs", error);
-    return [];
-  }
-}
-
+const getFeaturedWheelchairs = unstable_cache(
+  async () => {
+    try {
+      await backfillMissingWheelchairSlugs();
+      return await prisma.wheelchair.findMany({
+        where: { status: "AVAILABLE" },
+        take: 6,
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (error) {
+      console.error("[HOME] Failed to load featured wheelchairs", error);
+      return [];
+    }
+  },
+  ["home-featured-wheelchairs"],
+  { revalidate: 3600, tags: ["wheelchairs"] },
+);
 export default async function HomePage({ params }: Props) {
   const { locale } = await params;
   const isAr = locale === "ar";
