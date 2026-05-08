@@ -286,6 +286,7 @@ export class BookingService {
       where: { id: bookingId },
       data: {
         status: "CANCELLED",
+        reservationExpiresAt: null,
         cancelledAt: new Date(),
         cancelReason: reason,
       },

@@ -12,6 +12,14 @@ interface PaymentSuccessContentProps {
 }
 
 type BookingPaymentStatus = "PENDING" | "PAID" | "EXPIRED";
+type BookingStatus =
+  | "PENDING"
+  | "CONFIRMED"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED"
+  | "CANCELLED"
+  | "COMPLETED"
+  | "EXPIRED";
 
 export default function PaymentSuccessContent({
   locale,
@@ -26,6 +34,12 @@ export default function PaymentSuccessContent({
   >(isCash ? "success" : "pending");
   const [paymentStatus, setPaymentStatus] =
     useState<BookingPaymentStatus | null>(isCash ? "PAID" : null);
+  const [bookingStatus, setBookingStatus] = useState<BookingStatus | null>(
+    isCash ? "CONFIRMED" : null,
+  );
+  const [hasHydratedBooking, setHasHydratedBooking] = useState(
+    isCash || !bookingId,
+  );
   // const [supportPhone, setSupportPhone] = useState("");
 
   useEffect(() => {
@@ -33,21 +47,44 @@ export default function PaymentSuccessContent({
       return;
     }
 
+    const controller = new AbortController();
+
     void (async () => {
       try {
-        const res = await fetch(`/api/bookings/${bookingId}`);
+        const res = await fetch(`/api/bookings/${bookingId}`, {
+          signal: controller.signal,
+        });
         const data = await res.json();
-        if (data?.success && typeof data.data?.paymentStatus === "string") {
-          const nextStatus = data.data.paymentStatus as BookingPaymentStatus;
-          setPaymentStatus(nextStatus);
-          if (nextStatus === "PAID") {
-            setSyncStatus("success");
+        if (data?.success) {
+          if (typeof data.data?.paymentStatus === "string") {
+            const nextPaymentStatus =
+              data.data.paymentStatus as BookingPaymentStatus;
+            setPaymentStatus(nextPaymentStatus);
+            if (nextPaymentStatus === "PAID") {
+              setSyncStatus("success");
+            }
+          }
+
+          if (typeof data.data?.status === "string") {
+            const nextBookingStatus = data.data.status as BookingStatus;
+            setBookingStatus(nextBookingStatus);
+            if (nextBookingStatus === "CANCELLED") {
+              setSyncStatus("failed");
+            }
           }
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
         // Best-effort hydration only.
+      } finally {
+        setHasHydratedBooking(true);
       }
     })();
+
+    return () => controller.abort();
   }, [bookingId, isCash]);
 
   // useEffect(() => {
@@ -65,6 +102,7 @@ export default function PaymentSuccessContent({
 
   const isReady = isCash || paymentStatus === "PAID";
   const isExpired = paymentStatus === "EXPIRED";
+  const isCancelled = bookingStatus === "CANCELLED";
 
   let title = isAr ? "جار التحقق من الدفع" : "Payment Processing";
   let description = isAr
@@ -83,6 +121,11 @@ export default function PaymentSuccessContent({
     description = isAr
       ? "تم تأكيد حجزك. ستصلك رسالة بريد إلكتروني تحتوي على تفاصيل الحجز والفاتورة."
       : "Your booking is confirmed. You'll receive a confirmation email with booking details and invoice.";
+  } else if (isCancelled) {
+    title = isAr ? "\u062a\u0645 \u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632" : "Booking Cancelled";
+    description = isAr
+      ? "\u062a\u0645 \u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632 \u0628\u0646\u062c\u0627\u062d. \u0644\u0646 \u0646\u062a\u0627\u0628\u0639 \u062a\u0632\u0627\u0645\u0646 \u0627\u0644\u062f\u0641\u0639 \u0644\u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632."
+      : "This booking was cancelled, so payment sync has been skipped.";
   } else if (isExpired) {
     title = isAr ? "انتهى الحجز" : "Booking Expired";
     description = isAr
@@ -96,9 +139,22 @@ export default function PaymentSuccessContent({
         <PaymentSuccessSync
           paymentIntentId={paymentIntentId}
           bookingId={bookingId}
-          onSyncComplete={(status) => {
-            setPaymentStatus(status);
-            setSyncStatus(status === "PAID" ? "success" : "failed");
+          bookingStatus={bookingStatus}
+          paymentStatus={paymentStatus}
+          syncReady={hasHydratedBooking}
+          onSyncComplete={(result) => {
+            if (result.ignored) {
+              setSyncStatus("failed");
+            }
+            if (result.bookingStatus) {
+              setBookingStatus(result.bookingStatus);
+            }
+            if (result.paymentStatus) {
+              setPaymentStatus(result.paymentStatus);
+              setSyncStatus(
+                result.paymentStatus === "PAID" ? "success" : "failed",
+              );
+            }
           }}
           onSyncFailed={() => setSyncStatus("failed")}
         />
@@ -129,13 +185,13 @@ export default function PaymentSuccessContent({
           </div>
         )}
 
-        {syncStatus === "pending" && paymentStatus !== "PAID" ? (
+        {syncStatus === "pending" && paymentStatus !== "PAID" && !isCancelled ? (
           <p className="mb-4 text-sm text-slate-500">
             {isAr
               ? "جار التحقق من حالة الدفع..."
               : "Syncing payment status... Please wait before viewing your bookings."}
           </p>
-        ) : syncStatus === "failed" && !isExpired ? (
+        ) : syncStatus === "failed" && !isExpired && !isCancelled ? (
           <p className="mb-4 text-sm text-amber-600">
             {isAr
               ? "لم يتم تأكيد الدفع بعد. سيبقى الحجز قيد الانتظار حتى يؤكده Stripe أو ينتهي."
@@ -155,8 +211,8 @@ export default function PaymentSuccessContent({
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
             href={`/${locale}/dashboard`}
-            className={`btn-primary py-3 px-6 ${!isReady ? "pointer-events-none opacity-60" : ""}`}
-            aria-disabled={!isReady}
+            className={`btn-primary py-3 px-6 ${!isReady && !isCancelled ? "pointer-events-none opacity-60" : ""}`}
+            aria-disabled={!isReady && !isCancelled}
           >
             {isAr ? "عرض حجوزاتي" : "View My Bookings"}
           </Link>

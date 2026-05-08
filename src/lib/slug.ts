@@ -1,3 +1,8 @@
+import {
+  PrismaClientInitializationError,
+  PrismaClientKnownRequestError,
+} from "@prisma/client/runtime/library";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 function asciiSlug(value: string): string {
@@ -48,21 +53,36 @@ export async function generateUniqueWheelchairSlug(
 }
 
 export async function backfillMissingWheelchairSlugs(): Promise<void> {
-  const missing = await prisma.wheelchair.findMany({
-    where: { slug: null },
-    select: { id: true, name: true, category: true },
-    orderBy: { createdAt: "asc" },
-  });
-
-  for (const wheelchair of missing) {
-    const slug = await generateUniqueWheelchairSlug(wheelchair.name, {
-      category: wheelchair.category,
-      excludeId: wheelchair.id,
+  try {
+    const missing = await prisma.wheelchair.findMany({
+      where: { slug: null },
+      select: { id: true, name: true, category: true },
+      orderBy: { createdAt: "asc" },
     });
 
-    await prisma.wheelchair.update({
-      where: { id: wheelchair.id },
-      data: { slug },
-    });
+    for (const wheelchair of missing) {
+      const slug = await generateUniqueWheelchairSlug(wheelchair.name, {
+        category: wheelchair.category,
+        excludeId: wheelchair.id,
+      });
+
+      await prisma.wheelchair.update({
+        where: { id: wheelchair.id },
+        data: { slug },
+      });
+    }
+  } catch (error) {
+    if (
+      error instanceof PrismaClientInitializationError ||
+      error instanceof PrismaClientKnownRequestError
+    ) {
+      logger.warn("[SLUG] Skipping wheelchair slug backfill", {
+        reason: "Database unavailable",
+        error: error.message,
+      });
+      return;
+    }
+
+    throw error;
   }
 }

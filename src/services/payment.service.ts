@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { BookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getStripeClient } from "@/lib/stripe";
 import type { PaymentIntentResponse } from "@/types";
@@ -128,8 +128,11 @@ export class PaymentService {
     expectedBookingId?: string,
   ): Promise<{
     processed: boolean;
+    ignored?: boolean;
+    alreadyPaid?: boolean;
     reason?: string;
     bookingId?: string;
+    bookingStatus?: BookingStatus;
     paymentStatus?: "PENDING" | "PAID" | "EXPIRED";
   }> {
     const stripe = getStripeClient();
@@ -146,7 +149,12 @@ export class PaymentService {
 
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { id: true, userId: true, status: true },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        paymentStatus: true,
+      },
     });
 
     if (!booking) {
@@ -157,29 +165,57 @@ export class PaymentService {
       return { processed: false, reason: "Forbidden", bookingId };
     }
 
+    if (booking.status === "CANCELLED" || booking.status === "EXPIRED") {
+      return {
+        processed: false,
+        ignored: true,
+        reason: `Booking is ${booking.status.toLowerCase()}`,
+        bookingId,
+        bookingStatus: booking.status,
+        paymentStatus: booking.paymentStatus,
+      };
+    }
+
+    if (booking.paymentStatus === "PAID") {
+      return {
+        processed: true,
+        alreadyPaid: true,
+        bookingId,
+        bookingStatus: booking.status,
+        paymentStatus: booking.paymentStatus,
+      };
+    }
+
     if (intent.status !== "succeeded") {
       return {
         processed: false,
         reason: `PaymentIntent status is ${intent.status}`,
         bookingId,
+        bookingStatus: booking.status,
+        paymentStatus: booking.paymentStatus,
       };
     }
 
-    await this.onPaymentSucceeded(intent);
+    const result = await this.onPaymentSucceeded(intent);
 
     const updatedBooking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { paymentStatus: true },
+      select: { status: true, paymentStatus: true },
     });
 
     return {
-      processed: updatedBooking?.paymentStatus === "PAID",
+      processed: result.processed || updatedBooking?.paymentStatus === "PAID",
+      ignored: result.ignored,
+      alreadyPaid: result.alreadyPaid,
       bookingId,
+      bookingStatus: updatedBooking?.status,
       paymentStatus: updatedBooking?.paymentStatus,
       reason:
-        updatedBooking?.paymentStatus === "PAID"
+        result.ignored
+          ? result.reason
+          : updatedBooking?.paymentStatus === "PAID"
           ? undefined
-          : "Payment has not been marked as PAID yet",
+          : result.reason ?? "Payment has not been marked as PAID yet",
     };
   }
 
@@ -303,10 +339,22 @@ export class PaymentService {
     }
   }
 
-  async onPaymentSucceeded(intent: import("stripe").Stripe.PaymentIntent) {
+  async onPaymentSucceeded(
+    intent: import("stripe").Stripe.PaymentIntent,
+  ): Promise<{
+    processed: boolean;
+    ignored: boolean;
+    alreadyPaid: boolean;
+    reason?: string;
+  }> {
     const bookingId = intent.metadata.bookingId;
     if (!bookingId) {
-      return;
+      return {
+        processed: false,
+        ignored: true,
+        alreadyPaid: false,
+        reason: "Missing bookingId metadata",
+      };
     }
 
     const booking = await prisma.booking.findUnique({
@@ -323,46 +371,121 @@ export class PaymentService {
         bookingId,
         error: "Booking not found for succeeded payment intent",
       });
-      return;
+      return {
+        processed: false,
+        ignored: true,
+        alreadyPaid: false,
+        reason: "Booking not found",
+      };
     }
 
-    if (booking.paymentStatus !== "PAID") {
-      await prisma.$transaction(async (tx) => {
-        await tx.payment.upsert({
-          where: { bookingId },
-          update: {
-            stripePaymentIntentId: intent.id,
-            amount: Number(intent.amount) / 100,
-            currency: intent.currency,
-            status: "SUCCEEDED",
-            paidAt: new Date(),
-            metadata: toInputJson({
-              ...this.getPaymentMetadata(booking.payment?.metadata),
-              ...toJson(intent),
-            }),
-          },
-          create: {
-            bookingId,
-            stripePaymentIntentId: intent.id,
-            amount: Number(intent.amount) / 100,
-            currency: intent.currency,
-            status: "SUCCEEDED",
-            paidAt: new Date(),
-            metadata: toJson(intent),
-          },
-        });
-
-        await tx.booking.update({
-          where: { id: bookingId },
-          data: {
-            status: "CONFIRMED",
-            paymentMethod: "ONLINE",
-            paymentStatus: "PAID",
-            reservationExpiresAt: null,
-            paidAt: new Date(),
-          },
-        });
+    if (booking.status === "CANCELLED" || booking.status === "EXPIRED") {
+      logger.warn("[PAYMENT SYNC] Ignoring succeeded payment for inactive booking", {
+        bookingId,
+        bookingStatus: booking.status,
+        paymentIntentId: intent.id,
       });
+      return {
+        processed: false,
+        ignored: true,
+        alreadyPaid: false,
+        reason: `Booking is ${booking.status.toLowerCase()}`,
+      };
+    }
+
+    if (booking.paymentStatus === "PAID") {
+      return {
+        processed: true,
+        ignored: false,
+        alreadyPaid: true,
+      };
+    }
+
+    const paidAt = new Date();
+    const bookingUpdateResult = await prisma.$transaction(async (tx) => {
+      const bookingUpdate = await tx.booking.updateMany({
+        where: {
+          id: bookingId,
+          paymentStatus: { not: "PAID" },
+          status: { notIn: ["CANCELLED", "EXPIRED"] },
+        },
+        data: {
+          status: booking.status === "PENDING" ? "CONFIRMED" : booking.status,
+          paymentMethod: "ONLINE",
+          paymentStatus: "PAID",
+          reservationExpiresAt: null,
+          paidAt,
+        },
+      });
+
+      if (bookingUpdate.count === 0) {
+        return bookingUpdate;
+      }
+
+      await tx.payment.upsert({
+        where: { bookingId },
+        update: {
+          stripePaymentIntentId: intent.id,
+          amount: Number(intent.amount) / 100,
+          currency: intent.currency,
+          status: "SUCCEEDED",
+          paidAt,
+          metadata: toInputJson({
+            ...this.getPaymentMetadata(booking.payment?.metadata),
+            ...toJson(intent),
+          }),
+        },
+        create: {
+          bookingId,
+          stripePaymentIntentId: intent.id,
+          amount: Number(intent.amount) / 100,
+          currency: intent.currency,
+          status: "SUCCEEDED",
+          paidAt,
+          metadata: toJson(intent),
+        },
+      });
+
+      return bookingUpdate;
+    });
+
+    if (bookingUpdateResult.count === 0) {
+      const latestBooking = await prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { status: true, paymentStatus: true },
+      });
+
+      if (latestBooking?.paymentStatus === "PAID") {
+        return {
+          processed: true,
+          ignored: false,
+          alreadyPaid: true,
+        };
+      }
+
+      if (
+        latestBooking?.status === "CANCELLED" ||
+        latestBooking?.status === "EXPIRED"
+      ) {
+        logger.warn("[PAYMENT SYNC] Booking changed state before confirmation completed", {
+          bookingId,
+          bookingStatus: latestBooking.status,
+          paymentIntentId: intent.id,
+        });
+        return {
+          processed: false,
+          ignored: true,
+          alreadyPaid: false,
+          reason: `Booking is ${latestBooking.status.toLowerCase()}`,
+        };
+      }
+
+      return {
+        processed: false,
+        ignored: false,
+        alreadyPaid: false,
+        reason: "Payment confirmation was already handled",
+      };
     }
 
     const invoice = await this.prepareInvoiceNotificationData(
@@ -401,6 +524,12 @@ export class PaymentService {
         error,
       });
     }
+
+    return {
+      processed: true,
+      ignored: false,
+      alreadyPaid: false,
+    };
   }
 
   private async onPaymentFailed(intent: import("stripe").Stripe.PaymentIntent) {

@@ -34,6 +34,15 @@ export const POST = withCustomerAuth(async (req, { user }) => {
       bookingId || undefined,
     );
 
+    if (result.processed || result.ignored) {
+      return ok(
+        result,
+        result.ignored
+          ? "Payment confirmation was skipped"
+          : "Payment confirmation synchronized",
+      );
+    }
+
     if (!result.processed) {
       return badRequest(result.reason ?? "Payment not processed");
     }
