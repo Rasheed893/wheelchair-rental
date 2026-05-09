@@ -4,6 +4,7 @@ import { formatAED } from "@/lib/currency";
 import type { DeliveryCity } from "@/lib/delivery";
 import { getDeliveryFee } from "@/lib/delivery";
 import { calculateBookingPricing } from "@/lib/pricing";
+import { getSecurityDeposit } from "@/lib/security-deposit";
 import type { WheelchairPublic } from "@/types";
 
 interface Props {
@@ -31,6 +32,7 @@ export function BookingSummary({
     deliveryCity ? getDeliveryFee(deliveryCity) : 0,
   );
   const name = isAr ? wheelchair.nameAr : wheelchair.name;
+  const securityDeposit = getSecurityDeposit(wheelchair.category);
 
   return (
     <div className="card sticky top-24 p-5">
@@ -90,6 +92,12 @@ export function BookingSummary({
           <div className="flex justify-between text-base font-bold">
             <span>{isAr ? "Total" : "Total"}</span>
             <span className="text-primary-700">{formatAED(pricing.total)}</span>
+          </div>
+          <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+            {isAr
+              ? "Refundable security deposit due on delivery"
+              : "Refundable security deposit due on delivery"}
+            : <span className="font-semibold">{formatAED(securityDeposit)}</span>
           </div>
           <p className="pt-1 text-center text-xs text-slate-400">
             {isAr ? "Inclusive of VAT" : "Inclusive of VAT"}

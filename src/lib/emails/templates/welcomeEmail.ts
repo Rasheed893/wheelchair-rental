@@ -3,7 +3,7 @@ import { emailLayout, ctaButton } from "./emailLayout";
 
 export function welcomeTemplate(name?: string) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";
-  const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME ?? "WheelRent";
+  const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME ?? "BioMobility";
 
   const content = `
     <h2 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#0f172a;">

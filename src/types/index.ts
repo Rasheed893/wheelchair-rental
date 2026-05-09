@@ -7,15 +7,18 @@ import type {
   PaymentStatus,
   WheelchairStatus,
   WheelchairCategory,
+  IdDocumentType,
   Role,
 } from "@prisma/client";
 import type { DeliveryCity, DeliveryWindow } from "@/lib/delivery";
+import type { CommunicationRisk } from "@/lib/communication-risk";
 
 export {
   BookingStatus,
   PaymentStatus,
   WheelchairStatus,
   WheelchairCategory,
+  IdDocumentType,
   Role,
 };
 
@@ -81,6 +84,8 @@ type BookingPaymentFields = {
   paymentStatus: "PENDING" | "PAID" | "EXPIRED";
   reservationExpiresAt?: Date | null;
   paidAt?: Date | null;
+  communicationRisk?: CommunicationRisk;
+  communicationPriority?: string[];
 };
 
 export type BookingWithRelations = Booking & BookingPaymentFields & {
@@ -95,11 +100,16 @@ export interface BookingCreateInput {
   endDate: string;
   fullName: string;
   phoneNumber: string;
+  whatsappNumber: string;
   deliveryCity: DeliveryCity;
   deliveryWindow: DeliveryWindow;
   deliveryAddress: string;
   deliveryNotes?: string;
   paymentMethod: "ONLINE" | "CASH";
+  termsAccepted: true;
+  termsVersion: string;
+  idDocumentType: IdDocumentType;
+  idDocumentUrl: string;
 }
 
 export interface AvailabilityResponse {

@@ -22,6 +22,8 @@ export default function Navbar({ locale }: NavbarProps) {
   const isRTL = locale === "ar";
   const otherLocale = locale === "en" ? "ar" : "en";
   const otherLocalePath = pathname.replace(`/${locale}`, `/${otherLocale}`);
+  const logoAlt =
+    process.env.NEXT_PUBLIC_COMPANY_NAME?.trim() || "BioMobility";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -53,21 +55,29 @@ export default function Navbar({ locale }: NavbarProps) {
       <div className="page-container">
         <nav className="flex items-center justify-between h-20">
           {/* Logo */}
-          <div className="flex-shrink-0 ">
-            <Link href={`/${locale}`} className="flex items-center gap-2">
+          <div className="flex-shrink-0">
+            <Link
+              href={`/${locale}`}
+              className="flex items-center"
+              aria-label={logoAlt}
+            >
               <Image
-                src="/logo.svg"
-                alt={`${process.env.NEXT_PUBLIC_COMPANY_NAME} Logo`}
+                src="/branding/logo.svg"
+                alt={logoAlt}
                 width={220}
-                height={48}
-                className="object-contain"
+                height={55}
+                className="h-auto w-[150px] object-contain sm:w-[160px] md:w-[190px] lg:w-[210px]"
                 priority
               />
             </Link>
           </div>
 
           {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-8 ml-auto mr-10">
+          <div
+            className={`hidden md:flex items-center gap-8 ${
+              isRTL ? "mr-auto ml-8" : "ml-auto mr-8"
+            }`}
+          >
             {navLink("/wheelchairs", t("browse"))}
             {user && navLink("/dashboard", t("myBookings"))}
             {user?.role === "ADMIN" && navLink("/admin", t("admin"))}
@@ -94,7 +104,11 @@ export default function Navbar({ locale }: NavbarProps) {
                   <span>{user.name?.split(" ")[0] ?? "User"}</span>
                 </button>
                 {/* Dropdown */}
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
+                <div
+                  className={`absolute top-full mt-2 w-48 rounded-xl border border-slate-100 bg-white py-1 shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible ${
+                    isRTL ? "left-0" : "right-0"
+                  }`}
+                >
                   <Link
                     href={`/${locale}/dashboard`}
                     className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"

@@ -20,6 +20,10 @@ type AdminBooking = {
   paymentMethod: PaymentMethod;
   paymentStatus: BookingPaymentStatus;
   phoneNumber: string;
+  whatsappNumber?: string | null;
+  whatsappVerifiedAt?: string | Date | null;
+  idDocumentType?: string | null;
+  idDocumentUploadedAt?: string | Date | null;
   createdAt: string | Date;
   user?: {
     name?: string | null;
@@ -58,6 +62,12 @@ const PAYMENT_STATUSES: Array<BookingPaymentStatus | "ALL"> = [
   "PAID",
 ];
 
+const WHATSAPP_VERIFICATION_STATUSES = [
+  "ALL",
+  "VERIFIED",
+  "NOT_VERIFIED",
+] as const;
+
 const NEXT_STATUS_OPTIONS: Record<BookingStatus, BookingStatus[]> = {
   PENDING: ["CONFIRMED"],
   CONFIRMED: ["OUT_FOR_DELIVERY"],
@@ -80,12 +90,37 @@ function getPaymentLabel(booking: AdminBooking) {
   return "Pending";
 }
 
+function WhatsAppVerificationBadge({ booking }: { booking: AdminBooking }) {
+  const verified = Boolean(booking.whatsappVerifiedAt);
+
+  return (
+    <span
+      className={
+        verified
+          ? "inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
+          : "inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
+      }
+    >
+      <span
+        className={
+          verified
+            ? "h-2 w-2 rounded-full bg-emerald-500"
+            : "h-2 w-2 rounded-full bg-amber-500"
+        }
+      />
+      {verified ? "WhatsApp Verified" : "Not Verified"}
+    </span>
+  );
+}
+
 export default function AdminBookingsPage() {
   const params = useParams();
   const locale = params.locale as string;
   const [bookings, setBookings] = useState<AdminBooking[]>([]);
   const [orderStatus, setOrderStatus] = useState<string>("ALL");
   const [paymentStatus, setPaymentStatus] = useState<string>("ALL");
+  const [whatsappVerification, setWhatsappVerification] =
+    useState<string>("ALL");
   const [query, setQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [loading, setLoading] = useState(true);
@@ -113,6 +148,9 @@ export default function AdminBookingsPage() {
     if (paymentStatus !== "ALL") {
       params.set("paymentStatus", paymentStatus);
     }
+    if (whatsappVerification !== "ALL") {
+      params.set("whatsappVerification", whatsappVerification);
+    }
     if (query.trim()) {
       params.set("query", query.trim());
     }
@@ -138,7 +176,7 @@ export default function AdminBookingsPage() {
       ),
     );
     setLoading(false);
-  }, [orderStatus, page, paymentStatus, query]);
+  }, [orderStatus, page, paymentStatus, query, whatsappVerification]);
 
   useEffect(() => {
     // This page synchronizes filters/pagination to the latest API response.
@@ -248,7 +286,7 @@ export default function AdminBookingsPage() {
             </p>
           </div>
 
-          <div className="card mb-6 grid gap-4 p-5 lg:grid-cols-4">
+          <div className="card mb-6 grid gap-4 p-5 lg:grid-cols-5">
             <div className="lg:col-span-2">
               <label className="mb-1.5 block text-sm font-medium text-slate-700">
                 Search by booking ID or email
@@ -308,6 +346,26 @@ export default function AdminBookingsPage() {
                 {PAYMENT_STATUSES.map((value) => (
                   <option key={value} value={value}>
                     {value}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                WhatsApp
+              </label>
+              <select
+                value={whatsappVerification}
+                onChange={(event) => {
+                  setPage(1);
+                  setWhatsappVerification(event.target.value);
+                }}
+                className="input-field"
+              >
+                {WHATSAPP_VERIFICATION_STATUSES.map((value) => (
+                  <option key={value} value={value}>
+                    {value === "NOT_VERIFIED" ? "NOT VERIFIED" : value}
                   </option>
                 ))}
               </select>
@@ -383,6 +441,15 @@ export default function AdminBookingsPage() {
                           </p>
                           <p className="break-words">
                             {booking.paymentMethod} · {getPaymentLabel(booking)}
+                          </p>
+                          <div>
+                            <WhatsAppVerificationBadge booking={booking} />
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            ID{" "}
+                            {booking.idDocumentUploadedAt
+                              ? `${booking.idDocumentType ?? "copy"} received`
+                              : "missing"}
                           </p>
                           <p className="text-xs text-slate-400">
                             Created {format(new Date(booking.createdAt), "MMM d, yyyy")}
@@ -509,6 +576,15 @@ export default function AdminBookingsPage() {
                               </div>
                               <div className="break-words text-xs text-slate-400">
                                 {booking.phoneNumber}
+                              </div>
+                              <div className="mt-2">
+                                <WhatsAppVerificationBadge booking={booking} />
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                ID{" "}
+                                {booking.idDocumentUploadedAt
+                                  ? `${booking.idDocumentType ?? "copy"} received`
+                                  : "missing"}
                               </div>
                             </td>
                             <td className="px-4 py-4 break-words text-slate-700">

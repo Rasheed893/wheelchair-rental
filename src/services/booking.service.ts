@@ -26,8 +26,35 @@ import {
 } from "@/lib/booking-reservation";
 import { getDeliveryFee } from "@/lib/delivery";
 import { calculateBookingPricing } from "@/lib/pricing";
+import {
+  getCommunicationPriority,
+  getCommunicationRisk,
+} from "@/lib/communication-risk";
 
 export class BookingService {
+  private withCommunicationMetadata<T extends Record<string, unknown>>(booking: T) {
+    return {
+      ...booking,
+      communicationRisk: getCommunicationRisk(
+        booking.whatsappNumber as string | null | undefined,
+        booking.whatsappVerifiedAt as Date | string | null | undefined,
+      ),
+      communicationPriority: getCommunicationPriority(
+        booking.whatsappVerifiedAt as Date | string | null | undefined,
+      ),
+    };
+  }
+
+  private redactCustomerBooking<T extends Record<string, unknown>>(booking: T) {
+    return {
+      ...this.withCommunicationMetadata(booking),
+      idDocumentUrl: null,
+      whatsappOtpHash: null,
+      whatsappOtpExpiresAt: null,
+      whatsappOtpAttempts: 0,
+    };
+  }
+
   async expirePendingBookings(): Promise<number> {
     const MAX_RETRIES = 3;
     const now = new Date();
@@ -68,7 +95,13 @@ export class BookingService {
   ): Promise<BookingWithRelations> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        whatsappNumber: true,
+        whatsappVerifiedAt: true,
+      },
     });
 
     if (!user) {
@@ -90,6 +123,17 @@ export class BookingService {
     if (startDate >= endDate) {
       throw new Error("End date must be after start date");
     }
+
+    if (!input.termsAccepted) {
+      throw new Error("You must accept the Terms & Conditions.");
+    }
+
+    const whatsappVerifiedAt =
+      user.whatsappNumber === input.whatsappNumber ? user.whatsappVerifiedAt : null;
+    const communicationRisk = getCommunicationRisk(
+      input.whatsappNumber,
+      whatsappVerifiedAt,
+    );
 
     const wheelchair = await wheelchairService.getById(wheelchairId);
 
@@ -132,6 +176,8 @@ export class BookingService {
         totalPrice: pricing.total,
         status: input.paymentMethod === "CASH" ? "CONFIRMED" : "PENDING",
         phoneNumber: input.phoneNumber,
+        whatsappNumber: input.whatsappNumber,
+        whatsappVerifiedAt,
         deliveryCity: input.deliveryCity,
         deliveryWindow: input.deliveryWindow,
         deliveryAddress: input.deliveryAddress,
@@ -139,6 +185,11 @@ export class BookingService {
         deliveryFee,
         paymentMethod: input.paymentMethod,
         paymentStatus: "PENDING",
+        termsAcceptedAt: new Date(),
+        termsVersion: input.termsVersion,
+        idDocumentType: input.idDocumentType,
+        idDocumentUrl: input.idDocumentUrl,
+        idDocumentUploadedAt: new Date(),
         reservationExpiresAt:
           input.paymentMethod === "ONLINE" ? getReservationExpiryDate() : null,
         paidAt: null,
@@ -164,6 +215,8 @@ export class BookingService {
       paymentMethod: booking.paymentMethod,
       paymentStatus: booking.paymentStatus,
       customerEmail: booking.user.email,
+      communicationRisk,
+      communicationPriority: getCommunicationPriority(booking.whatsappVerifiedAt),
     });
 
     if (input.paymentMethod === "CASH") {
@@ -218,7 +271,9 @@ export class BookingService {
       }
     }
 
-    return booking as BookingWithRelations;
+    return this.redactCustomerBooking(
+      booking as unknown as Record<string, unknown>,
+    ) as unknown as BookingWithRelations;
   }
 
   async getUserBookings(
@@ -242,7 +297,9 @@ export class BookingService {
     ]);
 
     return {
-      data: data as BookingWithRelations[],
+      data: data.map((booking) =>
+        this.redactCustomerBooking(booking as unknown as Record<string, unknown>),
+      ) as unknown as BookingWithRelations[],
       total,
       page,
       pageSize,
@@ -258,10 +315,24 @@ export class BookingService {
 
     const where = userId ? { id: bookingId, userId } : { id: bookingId };
 
-    return prisma.booking.findFirst({
+    const booking = await prisma.booking.findFirst({
       where,
       include: { wheelchair: true, payment: true, invoice: true },
-    }) as Promise<BookingWithRelations | null>;
+    });
+
+    if (!booking) {
+      return null;
+    }
+
+    if (userId) {
+      return this.redactCustomerBooking(
+        booking as unknown as Record<string, unknown>,
+      ) as unknown as BookingWithRelations;
+    }
+
+    return this.withCommunicationMetadata(
+      booking as unknown as Record<string, unknown>,
+    ) as unknown as BookingWithRelations;
   }
 
   async cancel(
@@ -314,13 +385,22 @@ export class BookingService {
       }
     }
 
-    return updated as unknown as BookingWithRelations;
+    if (!isAdmin) {
+      return this.redactCustomerBooking(
+        updated as unknown as Record<string, unknown>,
+      ) as unknown as BookingWithRelations;
+    }
+
+    return this.withCommunicationMetadata(
+      updated as unknown as Record<string, unknown>,
+    ) as unknown as BookingWithRelations;
   }
 
   async adminList(
     filters: {
       status?: BookingStatus;
       paymentStatus?: "PENDING" | "PAID" | "EXPIRED";
+      whatsappVerification?: "VERIFIED" | "NOT_VERIFIED";
       query?: string;
     } = {},
     pagination: PaginationParams = {},
@@ -333,6 +413,12 @@ export class BookingService {
       ...(filters.status ? { status: filters.status } : {}),
       ...(filters.paymentStatus
         ? { paymentStatus: filters.paymentStatus }
+        : {}),
+      ...(filters.whatsappVerification === "VERIFIED"
+        ? { whatsappVerifiedAt: { not: null } }
+        : {}),
+      ...(filters.whatsappVerification === "NOT_VERIFIED"
+        ? { whatsappVerifiedAt: null }
         : {}),
       ...(filters.query
         ? {
@@ -368,7 +454,11 @@ export class BookingService {
     ]);
 
     return {
-      data: data as unknown as BookingWithRelations[],
+      data: data.map((booking) =>
+        this.withCommunicationMetadata(
+          booking as unknown as Record<string, unknown>,
+        ),
+      ) as unknown as BookingWithRelations[],
       total,
       page,
       pageSize,
@@ -438,7 +528,9 @@ export class BookingService {
       }
     }
 
-    return updated as unknown as BookingWithRelations;
+    return this.withCommunicationMetadata(
+      updated as unknown as Record<string, unknown>,
+    ) as unknown as BookingWithRelations;
   }
 
   getBlockingReservationWhere(now = new Date()) {

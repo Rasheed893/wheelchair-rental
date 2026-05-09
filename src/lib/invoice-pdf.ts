@@ -34,6 +34,12 @@ const REGULAR_FONT_PATH = path.join(
   "NotoSansArabic-Regular.ttf",
 );
 const BOLD_FONT_PATH = path.join(FONT_DIRECTORY, "NotoSansArabic-Bold.ttf");
+const INVOICE_LOGO_PATH = path.join(
+  process.cwd(),
+  "public",
+  "branding",
+  "invoice-logo-240x60.png",
+);
 
 let invoiceFontBytesPromise:
   | Promise<{ regular: Uint8Array; bold: Uint8Array }>
@@ -58,7 +64,7 @@ function formatMoney(value: number, currency: string) {
 }
 
 function companyName() {
-  return process.env.NEXT_PUBLIC_COMPANY_NAME?.trim() || "WheelRent";
+  return process.env.NEXT_PUBLIC_COMPANY_NAME?.trim() || "BioMobility";
 }
 
 function companyVatNumber() {
@@ -93,13 +99,10 @@ export async function buildInvoicePdf(
   const fontArabic = await pdf.embedFont(fontBytes.regular, { subset: true });
   const fontArabicBold = await pdf.embedFont(fontBytes.bold, { subset: true });
 
-  const logoBytes = await readFile(
-    path.join(process.cwd(), "public", "logo.png"),
-  );
+  const logoBytes = await readFile(INVOICE_LOGO_PATH);
   const logoImage = await pdf.embedPng(logoBytes);
 
-  // Scale logo to fit nicely: max 56px tall, proportional width
-  const logoDims = logoImage.scaleToFit(250, 70);
+  const logoDims = logoImage.scaleToFit(155, 42);
 
   const selectFont = (value: string, bold = false) => {
     if (ARABIC_TEXT_PATTERN.test(value)) {
@@ -125,6 +128,42 @@ export async function buildInvoicePdf(
     });
   };
 
+  const splitWordToFit = (
+    word: string,
+    maxWidth: number,
+    size: number,
+    bold = false,
+  ) => {
+    const font = selectFont(word, bold);
+    if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+      return [word];
+    }
+
+    const segments: string[] = [];
+    let remaining = word;
+
+    while (remaining.length > 0) {
+      let segment = "";
+
+      for (const char of remaining) {
+        const candidate = `${segment}${char}`;
+        if (font.widthOfTextAtSize(candidate, size) > maxWidth) {
+          break;
+        }
+        segment = candidate;
+      }
+
+      if (!segment) {
+        segment = remaining[0];
+      }
+
+      segments.push(segment);
+      remaining = remaining.slice(segment.length);
+    }
+
+    return segments;
+  };
+
   const wrapText = (
     value: string,
     maxWidth: number,
@@ -144,16 +183,22 @@ export async function buildInvoicePdf(
 
       let currentLine = "";
       for (const word of words) {
-        const candidate = currentLine ? `${currentLine} ${word}` : word;
-        if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
-          currentLine = candidate;
-          continue;
-        }
+        const segments = splitWordToFit(word, maxWidth, size, bold);
 
-        if (currentLine) {
-          lines.push(currentLine);
+        for (const segment of segments) {
+          const candidate = currentLine
+            ? `${currentLine} ${segment}`
+            : segment;
+          if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+            currentLine = candidate;
+            continue;
+          }
+
+          if (currentLine) {
+            lines.push(currentLine);
+          }
+          currentLine = segment;
         }
-        currentLine = word;
       }
 
       if (currentLine) {
@@ -206,11 +251,11 @@ export async function buildInvoicePdf(
       bold: true,
     });
     const lines = drawMultilineValue(value, {
-      x: 180,
+      x: 170,
       y,
       size: 10,
       color: rgb(0.07, 0.11, 0.17),
-      maxWidth: 340,
+      maxWidth: 360,
       lineHeight: 13,
     });
 
@@ -228,8 +273,8 @@ export async function buildInvoicePdf(
 
   // ── FIX 1: Logo — properly sized & vertically centred in header ────────────
   // Header spans from PAGE_HEIGHT down to PAGE_HEIGHT-132, centre = PAGE_HEIGHT-66
-  const logoX = 40;
-  const logoY = PAGE_HEIGHT - 66 - logoDims.height / 2; // vertically centred
+  const logoX = 42;
+  const logoY = PAGE_HEIGHT - 60 - logoDims.height / 2;
   page.drawImage(logoImage, {
     x: logoX,
     y: logoY,
@@ -249,21 +294,21 @@ export async function buildInvoicePdf(
   // ── Right side: INVOICE label + number + date ──────────────────────────────
   drawText("INVOICE", {
     x: 420,
-    y: PAGE_HEIGHT - 62,
+    y: PAGE_HEIGHT - 58,
     size: 20,
     color: rgb(0.06, 0.36, 0.55),
     bold: true,
   });
   drawText(data.invoiceNumber, {
     x: 390,
-    y: PAGE_HEIGHT - 86,
+    y: PAGE_HEIGHT - 84,
     size: 12,
     color: rgb(0.07, 0.11, 0.17),
     bold: true,
   });
   drawText(`Issue date: ${formatDate(data.issuedAt)}`, {
     x: 390,
-    y: PAGE_HEIGHT - 104,
+    y: PAGE_HEIGHT - 102,
     size: 10,
     color: rgb(0.29, 0.33, 0.39),
   });

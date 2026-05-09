@@ -12,7 +12,10 @@ const BASE_URL = (
   ""
 ).replace(/\/$/, ""); // strip trailing slash
 
-const COMPANY = process.env.NEXT_PUBLIC_COMPANY_NAME ?? "WheelRent";
+const COMPANY = process.env.NEXT_PUBLIC_COMPANY_NAME ?? "BioMobility";
+const EMAIL_LOGO_URL = BASE_URL
+  ? `${BASE_URL}/branding/email-logo-320x80.png`
+  : "";
 
 const BRAND = "#0f5fa8";
 const BRAND_LIGHT = "#e8f2fb";
@@ -41,7 +44,7 @@ export function emailLayout(content: string, footerNote?: string): string {
       .email-wrapper { padding: 16px 8px !important; }
       .email-card { border-radius: 12px !important; }
       .email-header { padding: 24px 20px 20px !important; }
-      .email-header img { width: 160px !important; max-width: 80% !important; }
+      .email-logo { width: 180px !important; max-width: 100% !important; }
       .email-body { padding: 24px 20px 20px !important; font-size: 14px !important; }
       .email-footer { padding: 20px !important; }
       .info-table td { display: block !important; width: 100% !important; box-sizing: border-box; }
@@ -77,11 +80,12 @@ export function emailLayout(content: string, footerNote?: string): string {
                 style="background:${BRAND_LIGHT};padding:32px 48px 28px;text-align:center;
                        border-bottom:1px solid ${BORDER};">
               ${
-                BASE_URL
-                  ? `<img src="${BASE_URL}/logo-full.png"
+                EMAIL_LOGO_URL
+                  ? `<img src="${EMAIL_LOGO_URL}"
                           alt="${COMPANY}"
-                          width="220"
-                          style="width:220px;max-width:80%;height:auto;display:block;margin:0 auto;" />`
+                          width="180"
+                          class="email-logo"
+                          style="width:180px;max-width:100%;height:auto;display:block;margin:0 auto 16px;" />`
                   : `<span style="font-size:22px;font-weight:700;color:${BRAND};">${COMPANY}</span>`
               }
             </td>

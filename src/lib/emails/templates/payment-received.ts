@@ -39,7 +39,7 @@ export function paymentReceivedTemplate({
   paymentMethod?: "ONLINE" | "CASH";
   paidAt?: string;
 }) {
-  const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME ?? "WheelRent";
+  const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME ?? "BioMobility";
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";
 
   const content = `

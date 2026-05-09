@@ -59,7 +59,15 @@ export function passwordResetTemplateAr(
   resetLink: string,
 ): string {
   const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME ?? "WheelRent";
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";
+  const baseUrl = (
+    process.env.APP_URL ??
+    process.env.NEXTAUTH_URL ??
+    process.env.NEXT_PUBLIC_BASE_URL ??
+    ""
+  ).replace(/\/$/, "");
+  const emailLogoUrl = baseUrl
+    ? `${baseUrl}/branding/email-logo-320x80.png`
+    : "";
 
   // Arabic template uses its own inline layout (RTL)
   return `<!DOCTYPE html>
@@ -73,6 +81,7 @@ export function passwordResetTemplateAr(
       .email-wrapper { padding: 16px 8px !important; }
       .email-card { border-radius: 12px !important; }
       .email-header { padding: 24px 20px 20px !important; }
+      .email-logo { width: 180px !important; max-width: 100% !important; }
       .email-body { padding: 24px 20px 20px !important; }
       .email-footer { padding: 20px !important; }
       .rtl-cta-cell,
@@ -99,9 +108,14 @@ export function passwordResetTemplateAr(
           <tr>
             <td class="email-header" style="background:#e8f2fb;padding:32px 48px 28px;text-align:center;
                         border-bottom:1px solid #e2e8f0;">
-              <img src="${baseUrl}/logo.png" alt="${companyName}"
-                   width="220"
-                   style="width:220px;max-width:100%;height:auto;display:block;margin:0 auto;" />
+              ${
+                emailLogoUrl
+                  ? `<img src="${emailLogoUrl}" alt="${companyName}"
+                   width="180"
+                   class="email-logo"
+                   style="width:180px;max-width:100%;height:auto;display:block;margin:0 auto 16px;" />`
+                  : `<span style="font-size:22px;font-weight:700;color:#0f5fa8;">${companyName}</span>`
+              }
             </td>
           </tr>
 

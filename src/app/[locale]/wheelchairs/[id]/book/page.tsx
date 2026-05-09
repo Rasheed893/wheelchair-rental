@@ -16,6 +16,9 @@ import "react-day-picker/dist/style.css";
 import type { BookingWithRelations } from "@/types";
 import { formatAED } from "@/lib/currency";
 import { calculateBookingPricing } from "@/lib/pricing";
+import { getSecurityDeposit } from "@/lib/security-deposit";
+import { buildE164Phone, COUNTRY_DIAL_CODES } from "@/lib/phone";
+import { TERMS_VERSION } from "@/lib/terms";
 import { logger } from "@sentry/nextjs";
 import {
   DELIVERY_CITIES,
@@ -39,9 +42,12 @@ interface WheelchairInfo {
   slug?: string | null;
   name: string;
   nameAr: string;
+  category: string;
   pricePerDay: number;
   images: string[];
 }
+
+type IdDocumentType = "EMIRATES_ID" | "PASSPORT";
 
 function PaymentForm({
   bookingId,
@@ -112,6 +118,7 @@ export default function BookPage({
   const { locale, id } = React.use(params);
   const { bookingId } = React.use(searchParams);
   const router = useRouter();
+  const isAr = locale === "ar";
 
   const [wheelchair, setWheelchair] = useState<WheelchairInfo | null>(null);
   const [existingBooking, setExistingBooking] =
@@ -136,12 +143,30 @@ export default function BookPage({
     "PENDING" | "PAID" | "EXPIRED" | null
   >(null);
   const [customerName, setCustomerName] = useState("");
+  const [phoneCountryCode, setPhoneCountryCode] = useState("+971");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [verifiedWhatsappNumber, setVerifiedWhatsappNumber] = useState("");
+  const [whatsappVerifiedAt, setWhatsappVerifiedAt] = useState<string | null>(
+    null,
+  );
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpUnavailable, setOtpUnavailable] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "CASH">(
     "ONLINE",
   );
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [idDocumentType, setIdDocumentType] =
+    useState<IdDocumentType>("EMIRATES_ID");
+  const [idDocumentFile, setIdDocumentFile] = useState<File | null>(null);
+  const [idDocumentReference, setIdDocumentReference] = useState("");
+  const [idDocumentReceived, setIdDocumentReceived] = useState(false);
+  const [idDocumentUploading, setIdDocumentUploading] = useState(false);
 
   const days = useMemo(() => {
     if (!dateRange?.from || !dateRange?.to) {
@@ -162,6 +187,24 @@ export default function BookPage({
     Number(activePricePerDay),
     activeDeliveryFee,
   );
+  const activeSecurityDeposit = getSecurityDeposit(
+    existingBooking?.wheelchair?.category ?? wheelchair?.category,
+  );
+  const currentWhatsappNumber = useMemo(() => {
+    if (!phoneNumber.trim()) {
+      return "";
+    }
+
+    try {
+      return buildE164Phone(phoneCountryCode, phoneNumber);
+    } catch {
+      return "";
+    }
+  }, [phoneCountryCode, phoneNumber]);
+  const whatsappIsVerified =
+    Boolean(whatsappVerifiedAt) &&
+    verifiedWhatsappNumber === currentWhatsappNumber &&
+    Boolean(currentWhatsappNumber);
 
   const bookingPath = wheelchair?.slug
     ? buildWheelchairBookingPath(wheelchair.slug)
@@ -254,10 +297,127 @@ export default function BookPage({
             setDeliveryWindow(data.data.deliveryWindow);
             setDeliveryAddress(data.data.deliveryAddress);
             setDeliveryNotes(data.data.deliveryNotes ?? "");
+            setVerifiedWhatsappNumber(data.data.whatsappNumber ?? "");
+            setWhatsappVerifiedAt(data.data.whatsappVerifiedAt ?? null);
+            setIdDocumentReceived(Boolean(data.data.idDocumentUploadedAt));
           }
         });
     }
   }, [bookingIdState]);
+
+  function getNormalizedWhatsappNumber() {
+    return buildE164Phone(phoneCountryCode, phoneNumber);
+  }
+
+  async function handleSendOtp() {
+    setOtpLoading(true);
+    setOtpError(null);
+    setOtpUnavailable(false);
+    setError(null);
+
+    try {
+      const normalizedPhone = getNormalizedWhatsappNumber();
+      const response = await fetch("/api/booking/whatsapp-otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: normalizedPhone }),
+      });
+      const payload = await response.json();
+
+      if (!payload.success) {
+        throw new Error(payload.error ?? "Unable to send WhatsApp code.");
+      }
+
+      if (payload.data?.verificationUnavailable) {
+        setVerifiedWhatsappNumber("");
+        setWhatsappVerifiedAt(null);
+        setOtpSent(false);
+        setOtpCode("");
+        setOtpUnavailable(true);
+        return;
+      }
+
+      setVerifiedWhatsappNumber("");
+      setWhatsappVerifiedAt(null);
+      setOtpSent(true);
+      setOtpCode("");
+    } catch (otpSendError) {
+      setOtpError(
+        otpSendError instanceof Error
+          ? otpSendError.message
+          : "Unable to send WhatsApp code.",
+      );
+    } finally {
+      setOtpLoading(false);
+    }
+  }
+
+  async function handleVerifyOtp() {
+    setOtpLoading(true);
+    setOtpError(null);
+    setError(null);
+
+    try {
+      const normalizedPhone = getNormalizedWhatsappNumber();
+      const response = await fetch("/api/booking/whatsapp-otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: normalizedPhone, code: otpCode }),
+      });
+      const payload = await response.json();
+
+      if (!payload.success) {
+        throw new Error(payload.error ?? "Unable to verify WhatsApp code.");
+      }
+
+      setVerifiedWhatsappNumber(payload.data.phoneNumber);
+      setWhatsappVerifiedAt(payload.data.verifiedAt);
+      setOtpSent(false);
+      setOtpCode("");
+    } catch (otpVerifyError) {
+      setOtpError(
+        otpVerifyError instanceof Error
+          ? otpVerifyError.message
+          : "Unable to verify WhatsApp code.",
+      );
+    } finally {
+      setOtpLoading(false);
+    }
+  }
+
+  async function uploadIdDocument() {
+    if (idDocumentReference) {
+      return idDocumentReference;
+    }
+
+    if (!idDocumentFile) {
+      throw new Error("Upload an Emirates ID or Passport copy.");
+    }
+
+    setIdDocumentUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("idDocumentType", idDocumentType);
+      formData.append("file", idDocumentFile);
+
+      const response = await fetch("/api/booking/id-document", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = await response.json();
+
+      if (!payload.success || !payload.data?.reference) {
+        throw new Error(payload.error ?? "Unable to upload ID copy.");
+      }
+
+      setIdDocumentReference(payload.data.reference);
+      setIdDocumentReceived(true);
+      return payload.data.reference as string;
+    } finally {
+      setIdDocumentUploading(false);
+    }
+  }
 
   async function handleCreateBooking() {
     const wheelchairId = wheelchair?.id?.trim();
@@ -275,12 +435,25 @@ export default function BookPage({
       setError("Full name is required");
       return;
     }
-    if (!phoneNumber.trim()) {
-      setError("Phone number is required");
+    let normalizedWhatsappNumber = "";
+    try {
+      normalizedWhatsappNumber = getNormalizedWhatsappNumber();
+    } catch (phoneError) {
+      setError(
+        phoneError instanceof Error ? phoneError.message : "Phone number is invalid",
+      );
       return;
     }
     if (!deliveryAddress.trim()) {
       setError("Delivery address is required");
+      return;
+    }
+    if (!idDocumentFile && !idDocumentReference) {
+      setError("Upload an Emirates ID or Passport copy.");
+      return;
+    }
+    if (!termsAccepted) {
+      setError("Please accept the Terms & Conditions.");
       return;
     }
     if (dateRange.from >= dateRange.to) {
@@ -302,6 +475,8 @@ export default function BookPage({
         paymentMethod,
       });
 
+      const uploadedIdDocumentReference = await uploadIdDocument();
+
       const bookingResponse = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -310,12 +485,17 @@ export default function BookPage({
           startDate,
           endDate,
           fullName: customerName,
-          phoneNumber,
+          phoneNumber: normalizedWhatsappNumber,
+          whatsappNumber: normalizedWhatsappNumber,
           deliveryCity,
           deliveryWindow,
           deliveryAddress,
           deliveryNotes: deliveryNotes || undefined,
           paymentMethod,
+          termsAccepted: true,
+          termsVersion: TERMS_VERSION,
+          idDocumentType,
+          idDocumentUrl: uploadedIdDocumentReference,
         }),
       });
       const bookingData = await bookingResponse.json();
@@ -351,54 +531,174 @@ export default function BookPage({
     );
   }
 
-  const name = locale === "ar" ? wheelchair.nameAr : wheelchair.name;
+  const name = isAr ? wheelchair.nameAr : wheelchair.name;
   const bookingIsPaid = bookingPaymentStatus === "PAID";
   const bookingExpired = bookingPaymentStatus === "EXPIRED";
 
   return (
-    <div className="page-container py-10">
-      <div className="mx-auto max-w-4xl">
+    <div className="page-container overflow-x-hidden py-6 sm:py-10">
+      <div className="mx-auto max-w-5xl">
         <h1 className="section-heading mb-2">Book Wheelchair</h1>
         <p className="mb-8 text-slate-500">{name}</p>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
-          <div className="lg:col-span-3">
+        <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
+          <div className="min-w-0">
             {step === "dates" ? (
-              <div className="card p-6">
+              <div className="card overflow-hidden p-4 sm:p-6">
                 <h2 className="mb-4 font-semibold text-slate-900">
                   Select Rental Dates & Delivery Details
                 </h2>
 
                 <style>{`
+                  .booking-day-picker {
+                    --rdp-day-width: 36px;
+                    --rdp-day-height: 36px;
+                    --rdp-day_button-width: 34px;
+                    --rdp-day_button-height: 34px;
+                    --rdp-nav_button-width: 2rem;
+                    --rdp-nav_button-height: 2rem;
+                    width: 100%;
+                    max-width: 312px;
+                  }
+                  @media (min-width: 640px) {
+                    .booking-day-picker {
+                      --rdp-day-width: 44px;
+                      --rdp-day-height: 44px;
+                      --rdp-day_button-width: 42px;
+                      --rdp-day_button-height: 42px;
+                      max-width: 360px;
+                    }
+                  }
                   .rdp-day_selected { background-color: #0369a1 !important; }
                   .rdp-day_range_middle { background-color: #e0f2fe !important; color: #0369a1 !important; }
                   .rdp-button:hover:not([disabled]) { background-color: #f0f9ff; }
                 `}</style>
 
-                <DayPicker
-                  mode="range"
-                  selected={dateRange}
-                  onSelect={setDateRange}
-                  disabled={[{ before: new Date() }]}
-                  numberOfMonths={1}
-                  className="mx-auto"
-                />
+                <div className="flex w-full justify-center">
+                  <DayPicker
+                    mode="range"
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    disabled={[{ before: new Date() }]}
+                    numberOfMonths={1}
+                    className="booking-day-picker"
+                  />
+                </div>
 
                 <div className="mt-5 grid gap-3">
                   <input
-                    className="input"
+                    className="input-field"
                     placeholder="Full name"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                   />
-                  <input
-                    className="input"
-                    placeholder="Phone number"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                  />
+                  <div className="min-w-0 rounded-xl border border-slate-200 p-3">
+                    <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm font-medium text-slate-700">
+                        WhatsApp number
+                      </p>
+                      {whatsappIsVerified && (
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                          WhatsApp verified
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid min-w-0 gap-2 sm:grid-cols-[130px_minmax(0,1fr)]">
+                      <div>
+                        <input
+                          className="input-field"
+                          list="booking-country-codes"
+                          inputMode="tel"
+                          placeholder="+971"
+                          aria-label="Country code"
+                          value={phoneCountryCode}
+                          onChange={(e) => {
+                          setPhoneCountryCode(e.target.value);
+                          setWhatsappVerifiedAt(null);
+                          setVerifiedWhatsappNumber("");
+                          setOtpUnavailable(false);
+                        }}
+                        />
+                        <datalist id="booking-country-codes">
+                          {COUNTRY_DIAL_CODES.map((country) => (
+                            <option
+                              key={`${country.code}-${country.label}`}
+                              value={country.code}
+                            >
+                              {country.label}
+                            </option>
+                          ))}
+                        </datalist>
+                      </div>
+                      <input
+                        className="input-field min-w-0"
+                        placeholder="WhatsApp number"
+                        inputMode="tel"
+                        value={phoneNumber}
+                        onChange={(e) => {
+                          setPhoneNumber(e.target.value);
+                          setWhatsappVerifiedAt(null);
+                          setVerifiedWhatsappNumber("");
+                          setOtpUnavailable(false);
+                        }}
+                      />
+                    </div>
+                    {!whatsappIsVerified && (
+                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                        {isAr
+                          ? "لم يتم التحقق من واتساب. قد يؤدي ذلك إلى تأخير تأكيد الحجز."
+                          : "WhatsApp not verified. This may delay booking confirmation."}
+                      </div>
+                    )}
+                    <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_110px]">
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={otpLoading || !phoneNumber.trim()}
+                        className="btn-outline w-full justify-center px-4 py-2 text-sm"
+                      >
+                        {otpLoading ? "Sending..." : "Send WhatsApp OTP"}
+                      </button>
+                      {otpSent && (
+                        <>
+                          <input
+                            className="input-field w-full"
+                            placeholder="6-digit code"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={otpCode}
+                            onChange={(e) =>
+                              setOtpCode(e.target.value.replace(/\D/g, ""))
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={handleVerifyOtp}
+                            disabled={otpLoading || otpCode.length !== 6}
+                            className="btn-primary w-full justify-center px-4 py-2 text-sm"
+                          >
+                            Verify
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {otpError && (
+                      <p className="mt-2 text-xs text-red-600">{otpError}</p>
+                    )}
+                    {otpUnavailable && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        {isAr
+                          ? "التحقق غير متاح حاليا. يمكنك متابعة الحجز."
+                          : "Verification unavailable right now. You can continue booking."}
+                      </p>
+                    )}
+                    <p className="mt-2 text-xs text-slate-500">
+                      UAE and international numbers are supported and saved in
+                      E.164 format.
+                    </p>
+                  </div>
                   <select
-                    className="input"
+                    className="input-field"
                     value={deliveryCity}
                     onChange={(e) =>
                       setDeliveryCity(
@@ -422,7 +722,7 @@ export default function BookPage({
                     </optgroup>
                   </select>
                   <select
-                    className="input"
+                    className="input-field"
                     value={deliveryWindow}
                     onChange={(e) =>
                       setDeliveryWindow(
@@ -441,23 +741,61 @@ export default function BookPage({
                     Additional fee applies for other emirates.
                   </p>
                   <textarea
-                    className="input min-h-24"
+                    className="input-field min-h-24"
                     placeholder="Street / building / apartment"
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
                   />
                   <textarea
-                    className="input min-h-20"
+                    className="input-field min-h-20"
                     placeholder="Floor / instructions (optional)"
                     value={deliveryNotes}
                     onChange={(e) => setDeliveryNotes(e.target.value)}
                   />
+                  <div className="min-w-0 rounded-xl border border-slate-200 p-3">
+                    <p className="mb-2 text-sm font-medium text-slate-700">
+                      ID copy
+                    </p>
+                    <div className="grid min-w-0 gap-2 sm:grid-cols-[160px_minmax(0,1fr)]">
+                      <select
+                        className="input-field"
+                        value={idDocumentType}
+                        onChange={(e) => {
+                          setIdDocumentType(e.target.value as IdDocumentType);
+                          setIdDocumentReference("");
+                          setIdDocumentReceived(false);
+                        }}
+                      >
+                        <option value="EMIRATES_ID">Emirates ID</option>
+                        <option value="PASSPORT">Passport</option>
+                      </select>
+                      <input
+                        className="input-field min-w-0"
+                        type="file"
+                        accept="application/pdf,image/jpeg,image/png,image/webp"
+                        onChange={(e) => {
+                          setIdDocumentFile(e.target.files?.[0] ?? null);
+                          setIdDocumentReference("");
+                          setIdDocumentReceived(false);
+                        }}
+                      />
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Digital copy accepted. Admin-only access; customer view
+                      will only show ID copy received.
+                    </p>
+                    {idDocumentReceived && (
+                      <p className="mt-2 text-xs font-medium text-emerald-700">
+                        ID copy received
+                      </p>
+                    )}
+                  </div>
                   <div className="rounded-xl border border-slate-200 p-3">
                     <p className="mb-2 text-sm font-medium text-slate-700">
                       Payment Method
                     </p>
-                    <div className="flex gap-3 text-sm">
-                      <label className="flex items-center gap-2">
+                    <div className="grid gap-2 text-sm sm:grid-cols-2">
+                      <label className="flex items-center gap-2 rounded-lg border border-slate-100 p-2">
                         <input
                           type="radio"
                           checked={paymentMethod === "ONLINE"}
@@ -465,7 +803,7 @@ export default function BookPage({
                         />
                         ONLINE (Stripe)
                       </label>
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 rounded-lg border border-slate-100 p-2">
                         <input
                           type="radio"
                           checked={paymentMethod === "CASH"}
@@ -474,6 +812,34 @@ export default function BookPage({
                         CASH on Delivery
                       </label>
                     </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <label className="flex items-start gap-3 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        className="mt-1 shrink-0"
+                        checked={termsAccepted}
+                        onChange={(e) => setTermsAccepted(e.target.checked)}
+                      />
+                      <span>
+                        I agree to the{" "}
+                        <button
+                          type="button"
+                          onClick={() => setTermsOpen(true)}
+                          className="font-medium text-primary-700 underline"
+                        >
+                          Terms & Conditions
+                        </button>{" "}
+                        and rental agreement requirements.
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setTermsOpen(true)}
+                      className="mt-2 text-xs font-medium text-primary-700 underline"
+                    >
+                      View terms without leaving this booking
+                    </button>
                   </div>
                 </div>
 
@@ -485,10 +851,16 @@ export default function BookPage({
 
                 <button
                   onClick={handleCreateBooking}
-                  disabled={!dateRange?.from || !dateRange?.to || loading}
+                  disabled={
+                    !dateRange?.from ||
+                    !dateRange?.to ||
+                    loading ||
+                    idDocumentUploading ||
+                    !termsAccepted
+                  }
                   className="btn-primary mt-4 w-full justify-center py-3"
                 >
-                  {loading
+                  {loading || idDocumentUploading
                     ? "Processing..."
                     : paymentMethod === "CASH"
                       ? "Confirm Booking (COD)"
@@ -496,7 +868,7 @@ export default function BookPage({
                 </button>
               </div>
             ) : (
-              <div className="card p-6">
+              <div className="card overflow-hidden p-4 sm:p-6">
                 <h2 className="mb-4 font-semibold text-slate-900">
                   Payment Details
                 </h2>
@@ -557,8 +929,8 @@ export default function BookPage({
             )}
           </div>
 
-          <div className="lg:col-span-2">
-            <div className="card sticky top-24 p-5">
+          <div className="min-w-0">
+            <div className="card p-4 sm:p-5 lg:sticky lg:top-24">
               <h3 className="mb-4 font-semibold text-slate-900">
                 Booking Summary
               </h3>
@@ -606,6 +978,12 @@ export default function BookPage({
                     <span>Total</span>
                     <span className="text-primary-700">{formatAED(total)}</span>
                   </div>
+                  <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+                    Refundable security deposit due on delivery:{" "}
+                    <span className="font-semibold">
+                      {formatAED(activeSecurityDeposit)}
+                    </span>
+                  </div>
                 </div>
               ) : existingBooking ? (
                 <div className="space-y-2 text-sm">
@@ -645,6 +1023,12 @@ export default function BookPage({
                     <span>Total</span>
                     <span className="text-primary-700">{formatAED(total)}</span>
                   </div>
+                  <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+                    Refundable security deposit due on delivery:{" "}
+                    <span className="font-semibold">
+                      {formatAED(activeSecurityDeposit)}
+                    </span>
+                  </div>
                 </div>
               ) : (
                 <p className="py-4 text-center text-sm text-slate-400">
@@ -655,6 +1039,61 @@ export default function BookPage({
           </div>
         </div>
       </div>
+
+      {termsOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-slate-950/40 p-0 sm:items-center sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="booking-terms-title"
+        >
+          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:mx-auto sm:max-w-2xl sm:rounded-2xl sm:p-5">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2
+                  id="booking-terms-title"
+                  className="font-semibold text-slate-900"
+                >
+                  Terms & Conditions
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Version {TERMS_VERSION}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTermsOpen(false)}
+                className="rounded-lg border border-slate-200 px-3 py-1 text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-3 text-sm leading-6 text-slate-600">
+              <p>
+                UAE residents and tourists are accepted. Customers must be 18+
+                and provide a digital Emirates ID or Passport copy.
+              </p>
+              <p>
+                WhatsApp OTP verification is optional and may help us confirm
+                your booking faster. Admin confirmation, where needed, is
+                normally completed within 24 hours. Delivery windows are
+                estimates.
+              </p>
+              <p>
+                The refundable security deposit is collected upon delivery and
+                refunded after pickup and inspection, normally within 24 to 72
+                hours. Damage, loss, theft, missing accessories, lost chargers,
+                or battery damage may be deducted.
+              </p>
+              <p>
+                You must sign the rental agreement upon delivery. Full legal
+                terms remain available on the dedicated Terms & Conditions page
+                outside the booking flow.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

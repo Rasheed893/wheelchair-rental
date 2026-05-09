@@ -42,6 +42,11 @@ enum PaymentMethod {
   CASH
 }
 
+enum IdDocumentType {
+  EMIRATES_ID
+  PASSPORT
+}
+
 enum BookingPaymentStatus {
   PENDING
   PAID
@@ -89,6 +94,11 @@ model User {
   passwordHash  String
   name          String
   phone         String?
+  whatsappNumber String?
+  whatsappVerifiedAt DateTime?
+  whatsappOtpHash String?
+  whatsappOtpExpiresAt DateTime?
+  whatsappOtpAttempts Int       @default(0)
   role          Role      @default(CUSTOMER)
   emailVerified Boolean   @default(false)
   createdAt     DateTime  @default(now())
@@ -158,6 +168,16 @@ model Booking {
   deliveryFee     Decimal       @db.Decimal(10, 2) @default(0)
   paymentMethod   PaymentMethod       @default(ONLINE)
   paymentStatus   BookingPaymentStatus @default(PENDING)
+  termsAcceptedAt DateTime?
+  termsVersion    String?
+  whatsappNumber  String?
+  whatsappVerifiedAt DateTime?
+  whatsappOtpHash String?
+  whatsappOtpExpiresAt DateTime?
+  whatsappOtpAttempts Int       @default(0)
+  idDocumentType  IdDocumentType?
+  idDocumentUrl   String?
+  idDocumentUploadedAt DateTime?
   reservationExpiresAt DateTime?
   paidAt          DateTime?
   cancelledAt     DateTime?

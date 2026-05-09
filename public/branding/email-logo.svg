@@ -1,0 +1,11 @@
+<svg width="320" height="80" viewBox="0 0 320 80" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BioMobility email logo">
+  <rect x="0" y="10" width="60" height="60" rx="14" fill="#0EA5E9"/>
+  <circle cx="25.5" cy="24" r="5.5" fill="#FFFFFF"/>
+  <path d="M25.5 31V42.5L35.5 32.5H42.5" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M25.5 42.5L19 50.5" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+  <path d="M35.5 32.5L42.5 41.5L47.5 50.5" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="39.5" cy="48.5" r="10.5" stroke="#FFFFFF" stroke-width="4"/>
+  <path d="M28 52.5H18.5" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+  <text x="80" y="36" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#0369A1">BioMobility</text>
+  <text x="80" y="56" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="500" fill="#64748B">Wheelchair and mobility support</text>
+</svg>

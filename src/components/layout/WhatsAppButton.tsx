@@ -1,8 +1,13 @@
 // src/components/layout/WhatsAppButton.tsx
 "use client";
 
+import { usePathname } from "next/navigation";
+
 export default function WhatsAppButton({ number }: { number: string }) {
+  const pathname = usePathname();
+
   if (!number) return null;
+  if (/\/wheelchairs\/[^/]+\/book(?:\/)?$/.test(pathname)) return null;
 
   return (
     <a

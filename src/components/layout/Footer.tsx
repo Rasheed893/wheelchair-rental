@@ -1,50 +1,66 @@
 // src/components/layout/Footer.tsx
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function Footer({ locale }: { locale: string }) {
   const { user, loading } = useAuth();
+  const companyName =
+    process.env.NEXT_PUBLIC_COMPANY_NAME?.trim() || "BioMobility";
+
   return (
-    <footer className="bg-slate-900 text-slate-400 mt-20">
+    <footer className="mt-20 bg-slate-900 text-slate-400">
       <div className="page-container py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
           <div>
-            <div
-              className="flex items-center gap-2 font-bold text-xl text-white mb-3"
-              style={{ fontFamily: "var(--font-sora)" }}
+            <Link
+              href={`/${locale}`}
+              className="mb-4 inline-flex items-center"
+              aria-label={companyName}
             >
-              <span>♿</span>
-              <span>WheelRent</span>
-            </div>
+              <Image
+                src="/branding/logo.svg"
+                alt={companyName}
+                width={220}
+                height={55}
+                className="h-auto w-[150px] object-contain sm:w-[160px] md:w-[190px]"
+              />
+            </Link>
             <p className="text-sm leading-relaxed">
               {locale === "ar"
-                ? "خدمة تأجير الكراسي المتحركة الموثوقة لاحتياجاتك اليومية."
+                ? "\u062e\u062f\u0645\u0629 \u062a\u0623\u062c\u064a\u0631 \u0627\u0644\u0643\u0631\u0627\u0633\u064a \u0627\u0644\u0645\u062a\u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u0648\u062b\u0648\u0642\u0629 \u0644\u0627\u062d\u062a\u064a\u0627\u062c\u0627\u062a\u0643 \u0627\u0644\u064a\u0648\u0645\u064a\u0629."
                 : "Reliable wheelchair rental service for your daily mobility needs."}
             </p>
           </div>
 
           <div>
-            <h4 className="text-white font-semibold mb-3 text-sm">
-              {locale === "ar" ? "روابط سريعة" : "Quick Links"}
+            <h4 className="mb-3 text-sm font-semibold text-white">
+              {locale === "ar"
+                ? "\u0631\u0648\u0627\u0628\u0637 \u0633\u0631\u064a\u0639\u0629"
+                : "Quick Links"}
             </h4>
             <ul className="space-y-2 text-sm">
               <li>
                 <Link
                   href={`/${locale}/wheelchairs`}
-                  className="hover:text-white transition-colors"
+                  className="transition-colors hover:text-white"
                 >
-                  {locale === "ar" ? "تصفح الكراسي" : "Browse Wheelchairs"}
+                  {locale === "ar"
+                    ? "\u062a\u0635\u0641\u062d \u0627\u0644\u0643\u0631\u0627\u0633\u064a"
+                    : "Browse Wheelchairs"}
                 </Link>
               </li>
               {loading ? null : user ? (
                 <li>
                   <Link
                     href={`/${locale}/dashboard`}
-                    className="hover:text-white transition-colors"
+                    className="transition-colors hover:text-white"
                   >
-                    {locale === "ar" ? "طلباتي" : "My Orders"}
+                    {locale === "ar"
+                      ? "\u0637\u0644\u0628\u0627\u062a\u064a"
+                      : "My Orders"}
                   </Link>
                 </li>
               ) : (
@@ -52,17 +68,21 @@ export default function Footer({ locale }: { locale: string }) {
                   <li>
                     <Link
                       href={`/${locale}/auth/login`}
-                      className="hover:text-white transition-colors"
+                      className="transition-colors hover:text-white"
                     >
-                      {locale === "ar" ? "تسجيل الدخول" : "Login"}
+                      {locale === "ar"
+                        ? "\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644"
+                        : "Login"}
                     </Link>
                   </li>
                   <li>
                     <Link
                       href={`/${locale}/auth/register`}
-                      className="hover:text-white transition-colors"
+                      className="transition-colors hover:text-white"
                     >
-                      {locale === "ar" ? "إنشاء حساب" : "Register"}
+                      {locale === "ar"
+                        ? "\u0625\u0646\u0634\u0627\u0621 \u062d\u0633\u0627\u0628"
+                        : "Register"}
                     </Link>
                   </li>
                 </>
@@ -71,8 +91,10 @@ export default function Footer({ locale }: { locale: string }) {
           </div>
 
           <div>
-            <h4 className="text-white font-semibold mb-3 text-sm">
-              {locale === "ar" ? "تواصل معنا" : "Contact"}
+            <h4 className="mb-3 text-sm font-semibold text-white">
+              {locale === "ar"
+                ? "\u062a\u0648\u0627\u0635\u0644 \u0645\u0639\u0646\u0627"
+                : "Contact"}
             </h4>
             <ul className="space-y-2 text-sm">
               <li>{process.env.NEXT_PUBLIC_SUPPORT_EMAIL}</li>
@@ -81,9 +103,11 @@ export default function Footer({ locale }: { locale: string }) {
           </div>
         </div>
 
-        <div className="border-t border-slate-800 mt-10 pt-6 text-xs text-center">
-          © {new Date().getFullYear()} WheelRent.{" "}
-          {locale === "ar" ? "جميع الحقوق محفوظة." : "All rights reserved."}
+        <div className="mt-10 border-t border-slate-800 pt-6 text-center text-xs">
+          {"\u00A9"} {new Date().getFullYear()} {companyName}.{" "}
+          {locale === "ar"
+            ? "\u062c\u0645\u064a\u0639 \u0627\u0644\u062d\u0642\u0648\u0642 \u0645\u062d\u0641\u0648\u0638\u0629."
+            : "All rights reserved."}
         </div>
       </div>
     </footer>

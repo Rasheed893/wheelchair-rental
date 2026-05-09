@@ -108,7 +108,7 @@ const formatDate = (value: Date) =>
     timeZone: "Asia/Dubai",
   }).format(value);
 
-const companyName = () => process.env.NEXT_PUBLIC_COMPANY_NAME ?? "WheelRent";
+const companyName = () => process.env.NEXT_PUBLIC_COMPANY_NAME ?? "BioMobility";
 
 // ── 1. Booking confirmation (customer + admin) ────────────────────────────────
 

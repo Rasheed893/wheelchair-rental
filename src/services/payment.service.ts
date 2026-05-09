@@ -11,6 +11,10 @@ import {
 import { calculateBookingPricing } from "@/lib/pricing";
 import { getLegacyReservationCutoff } from "@/lib/booking-reservation";
 import { getOptionalEnv } from "@/lib/env";
+import {
+  getCommunicationPriority,
+  getCommunicationRisk,
+} from "@/lib/communication-risk";
 
 const CURRENCY = "aed";
 
@@ -857,6 +861,22 @@ export class PaymentService {
     if (paymentStatus !== "PAID") {
       return;
     }
+
+    const bookingCommunication = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { whatsappNumber: true, whatsappVerifiedAt: true },
+    });
+
+    logger.info("[PAYMENT EMAIL] Communication priority", {
+      bookingId,
+      communicationRisk: getCommunicationRisk(
+        bookingCommunication?.whatsappNumber,
+        bookingCommunication?.whatsappVerifiedAt,
+      ),
+      communicationPriority: getCommunicationPriority(
+        bookingCommunication?.whatsappVerifiedAt,
+      ),
+    });
 
     if (!metadata.paymentConfirmationCustomerSentAt) {
       const sentAt = new Date().toISOString();

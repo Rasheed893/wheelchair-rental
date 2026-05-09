@@ -4,8 +4,9 @@ import { defaultLocale, locales, type Locale } from "@/lib/i18n";
 export { defaultLocale, locales };
 export type { Locale };
 
-export const SITE_NAME = "WheelRent";
-export const SITE_SHORT_NAME = "WheelRent";
+export const SITE_NAME =
+  process.env.NEXT_PUBLIC_COMPANY_NAME?.trim() || "BioMobility";
+export const SITE_SHORT_NAME = SITE_NAME;
 export const SITE_DESCRIPTION =
   "Wheelchair rental across the UAE with fast delivery, pickup, and bilingual support.";
 export const SUPPORT_PHONE =
@@ -220,6 +221,15 @@ export function buildBaseMetadata(): Metadata {
         "x-default": buildLocalizedUrl(defaultLocale, "/"),
       },
     },
+    icons: {
+      icon: [
+        { url: "/favicon.ico" },
+        { url: "/branding/icon-192x192.png", sizes: "192x192", type: "image/png" },
+        { url: "/branding/icon-512x512.png", sizes: "512x512", type: "image/png" },
+      ],
+      apple: [{ url: "/favicon-apple-touch-icon.png" }],
+      shortcut: ["/favicon.ico"],
+    },
     robots: buildIndexRobots(),
     openGraph: {
       type: "website",
@@ -254,8 +264,8 @@ export function buildHomeMetadata(locale: Locale): Metadata {
     locale,
     pathname: "/",
     title: isAr
-      ? "تأجير كراسي متحركة في الإمارات مع التوصيل | WheelRent"
-      : "Wheelchair Rental UAE with Fast Delivery | WheelRent",
+      ? "تأجير كراسي متحركة في الإمارات مع التوصيل"
+      : "Wheelchair Rental UAE with Fast Delivery",
     description: isAr
       ? "استأجر كرسياً متحركاً في دبي والإمارات مع توصيل سريع وخدمة باللغة العربية والإنجليزية وخيارات عادية وكهربائية وأطفال."
       : "Rent wheelchairs across Dubai and the UAE with fast delivery, pickup, Arabic and English support, and standard, electric, pediatric, and bariatric options.",
@@ -275,8 +285,8 @@ export function buildListingMetadata(
     locale,
     pathname: "/wheelchairs",
     title: isAr
-      ? "تصفح الكراسي المتحركة للإيجار | WheelRent الإمارات"
-      : "Browse Wheelchairs for Rent in UAE | WheelRent",
+      ? "تصفح الكراسي المتحركة للإيجار في الإمارات"
+      : "Browse Wheelchairs for Rent in UAE",
     description: isAr
       ? "تصفح الكراسي المتحركة المتاحة للإيجار في الإمارات مع أسعار يومية وخيارات كهربائية وعادية وخدمة توصيل واستلام."
       : "Browse available wheelchairs for rent across the UAE with daily pricing, electric and standard models, and delivery and pickup support.",

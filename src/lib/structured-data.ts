@@ -30,7 +30,7 @@ export function buildLocalBusinessSchema(locale: Locale) {
     name: SITE_NAME,
     url: buildLocalizedUrl(locale, "/"),
     image: absoluteUrl("/og-default.jpg"),
-    logo: absoluteUrl("/logo.png"),
+    logo: absoluteUrl("/branding/icon-512x512.png"),
     description: SITE_DESCRIPTION,
     areaServed: {
       "@type": "Country",
