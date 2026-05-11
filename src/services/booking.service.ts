@@ -1,7 +1,8 @@
-import type { BookingStatus } from "@prisma/client";
+import type { BookingStatus, DepositDeductionType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import type {
+  AuthUser,
   BookingWithRelations,
   PaginatedResponse,
   PaginationParams,
@@ -30,6 +31,32 @@ import {
   getCommunicationPriority,
   getCommunicationRisk,
 } from "@/lib/communication-risk";
+import { getSecurityDeposit } from "@/lib/security-deposit";
+import {
+  notifyBookingReceived,
+  notifyDepositUpdated,
+} from "@/lib/booking-notifications";
+
+type DepositAction =
+  | "deposit-collected"
+  | "deposit-refunded"
+  | "deposit-partially-withheld"
+  | "deposit-withheld";
+
+type AdminDepositUpdateInput = {
+  action: DepositAction;
+  deductionType?: DepositDeductionType;
+  reason?: string;
+  handledBy?: string;
+  withheldAmount?: number;
+};
+
+const DEPOSIT_TRANSITIONS: Record<string, DepositAction[]> = {
+  PENDING: ["deposit-collected"],
+  COLLECTED: ["deposit-refunded", "deposit-partially-withheld", "deposit-withheld"],
+  REFUNDED: [],
+  PARTIALLY_WITHHELD: [],
+};
 
 export class BookingService {
   private withCommunicationMetadata<T extends Record<string, unknown>>(booking: T) {
@@ -37,10 +64,9 @@ export class BookingService {
       ...booking,
       communicationRisk: getCommunicationRisk(
         booking.whatsappNumber as string | null | undefined,
-        booking.whatsappVerifiedAt as Date | string | null | undefined,
       ),
       communicationPriority: getCommunicationPriority(
-        booking.whatsappVerifiedAt as Date | string | null | undefined,
+        booking.whatsappNumber as string | null | undefined,
       ),
     };
   }
@@ -49,9 +75,6 @@ export class BookingService {
     return {
       ...this.withCommunicationMetadata(booking),
       idDocumentUrl: null,
-      whatsappOtpHash: null,
-      whatsappOtpExpiresAt: null,
-      whatsappOtpAttempts: 0,
     };
   }
 
@@ -100,7 +123,6 @@ export class BookingService {
         email: true,
         name: true,
         whatsappNumber: true,
-        whatsappVerifiedAt: true,
       },
     });
 
@@ -128,12 +150,7 @@ export class BookingService {
       throw new Error("You must accept the Terms & Conditions.");
     }
 
-    const whatsappVerifiedAt =
-      user.whatsappNumber === input.whatsappNumber ? user.whatsappVerifiedAt : null;
-    const communicationRisk = getCommunicationRisk(
-      input.whatsappNumber,
-      whatsappVerifiedAt,
-    );
+    const communicationRisk = getCommunicationRisk(input.whatsappNumber);
 
     const wheelchair = await wheelchairService.getById(wheelchairId);
 
@@ -165,6 +182,7 @@ export class BookingService {
     );
     const deliveryFee = getDeliveryFee(input.deliveryCity);
     const pricing = calculateBookingPricing(days, pricePerDay, deliveryFee);
+    const securityDeposit = getSecurityDeposit(wheelchair.category);
 
     const booking = await prisma.booking.create({
       data: {
@@ -177,12 +195,13 @@ export class BookingService {
         status: input.paymentMethod === "CASH" ? "CONFIRMED" : "PENDING",
         phoneNumber: input.phoneNumber,
         whatsappNumber: input.whatsappNumber,
-        whatsappVerifiedAt,
         deliveryCity: input.deliveryCity,
         deliveryWindow: input.deliveryWindow,
         deliveryAddress: input.deliveryAddress,
         deliveryNotes: input.deliveryNotes,
         deliveryFee,
+        securityDeposit,
+        depositStatus: "PENDING",
         paymentMethod: input.paymentMethod,
         paymentStatus: "PENDING",
         termsAcceptedAt: new Date(),
@@ -216,7 +235,7 @@ export class BookingService {
       paymentStatus: booking.paymentStatus,
       customerEmail: booking.user.email,
       communicationRisk,
-      communicationPriority: getCommunicationPriority(booking.whatsappVerifiedAt),
+      communicationPriority: getCommunicationPriority(booking.whatsappNumber),
     });
 
     if (input.paymentMethod === "CASH") {
@@ -269,6 +288,12 @@ export class BookingService {
           error,
         });
       }
+
+      await notifyBookingReceived({
+        bookingId: booking.id,
+        whatsappNumber: booking.whatsappNumber,
+        securityDeposit: Number(booking.securityDeposit),
+      });
     }
 
     return this.redactCustomerBooking(
@@ -328,6 +353,29 @@ export class BookingService {
       return this.redactCustomerBooking(
         booking as unknown as Record<string, unknown>,
       ) as unknown as BookingWithRelations;
+    }
+
+    return this.withCommunicationMetadata(
+      booking as unknown as Record<string, unknown>,
+    ) as unknown as BookingWithRelations;
+  }
+
+  async adminGetById(bookingId: string): Promise<BookingWithRelations | null> {
+    await this.expirePendingBookings();
+
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        wheelchair: true,
+        payment: true,
+        invoice: true,
+        user: { select: { id: true, name: true, email: true } },
+        depositAuditLogs: { orderBy: { createdAt: "desc" } },
+      },
+    });
+
+    if (!booking) {
+      return null;
     }
 
     return this.withCommunicationMetadata(
@@ -400,7 +448,6 @@ export class BookingService {
     filters: {
       status?: BookingStatus;
       paymentStatus?: "PENDING" | "PAID" | "EXPIRED";
-      whatsappVerification?: "VERIFIED" | "NOT_VERIFIED";
       query?: string;
     } = {},
     pagination: PaginationParams = {},
@@ -413,12 +460,6 @@ export class BookingService {
       ...(filters.status ? { status: filters.status } : {}),
       ...(filters.paymentStatus
         ? { paymentStatus: filters.paymentStatus }
-        : {}),
-      ...(filters.whatsappVerification === "VERIFIED"
-        ? { whatsappVerifiedAt: { not: null } }
-        : {}),
-      ...(filters.whatsappVerification === "NOT_VERIFIED"
-        ? { whatsappVerifiedAt: null }
         : {}),
       ...(filters.query
         ? {
@@ -527,6 +568,163 @@ export class BookingService {
         });
       }
     }
+
+    return this.withCommunicationMetadata(
+      updated as unknown as Record<string, unknown>,
+    ) as unknown as BookingWithRelations;
+  }
+
+  async adminUpdateDeposit(
+    bookingId: string,
+    input: AdminDepositUpdateInput,
+    admin: AuthUser,
+  ) {
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        wheelchair: true,
+        payment: true,
+        invoice: true,
+      },
+    });
+
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    const oldStatus = booking.depositStatus;
+    const allowedActions = DEPOSIT_TRANSITIONS[oldStatus] ?? [];
+    if (!allowedActions.includes(input.action)) {
+      throw new Error(
+        `Cannot run ${input.action} when deposit status is ${oldStatus}.`,
+      );
+    }
+
+    const now = new Date();
+    const actorName = input.handledBy?.trim() || admin.name || admin.email || admin.id;
+    const actorEmail = admin.email || null;
+    const reason = input.reason?.trim() || undefined;
+    const isPartialWithholding =
+      input.action === "deposit-partially-withheld" ||
+      input.action === "deposit-withheld";
+    const securityDeposit = Number(booking.securityDeposit);
+    const withheldAmount = Number(input.withheldAmount);
+    const refundAmount =
+      isPartialWithholding && Number.isFinite(withheldAmount)
+        ? securityDeposit - withheldAmount
+        : undefined;
+
+    if (isPartialWithholding && !input.deductionType) {
+      throw new Error("Deduction type is required when deposit is withheld");
+    }
+
+    if (isPartialWithholding && !reason) {
+      throw new Error("Deduction reason is required when deposit is withheld");
+    }
+
+    if (
+      isPartialWithholding &&
+      (!Number.isFinite(withheldAmount) ||
+        withheldAmount <= 0 ||
+        withheldAmount >= securityDeposit)
+    ) {
+      throw new Error(
+        `Withheld amount must be greater than AED 0 and less than ${securityDeposit.toFixed(2)}.`,
+      );
+    }
+
+    const data =
+      input.action === "deposit-collected"
+        ? {
+            depositStatus: "COLLECTED" as const,
+            depositCollectedAt: booking.depositCollectedAt ?? now,
+            depositCollectedBy: actorName,
+            depositRefundedAt: null,
+            depositRefundedBy: null,
+            depositDeductionType: null,
+            depositDeductionReason: null,
+            depositWithheldAmount: null,
+            depositRefundAmount: null,
+          }
+        : input.action === "deposit-refunded"
+        ? {
+            depositStatus: "REFUNDED" as const,
+            depositRefundedAt: now,
+            depositRefundedBy: actorName,
+            depositDeductionType: null,
+            depositDeductionReason: null,
+            depositWithheldAmount: null,
+            depositRefundAmount: null,
+          }
+        : {
+            depositStatus: "PARTIALLY_WITHHELD" as const,
+            depositRefundedAt: now,
+            depositRefundedBy: actorName,
+            depositDeductionType: input.deductionType,
+            depositDeductionReason: reason,
+            depositWithheldAmount: withheldAmount,
+            depositRefundAmount: refundAmount,
+          };
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const updateResult = await tx.booking.updateMany({
+        where: { id: bookingId, depositStatus: oldStatus },
+        data,
+      });
+
+      if (updateResult.count !== 1) {
+        throw new Error("Deposit status changed. Refresh and try again.");
+      }
+
+      await tx.depositAuditLog.create({
+        data: {
+          bookingId,
+          action: isPartialWithholding
+            ? "deposit-partially-withheld"
+            : input.action,
+          oldStatus,
+          newStatus: data.depositStatus,
+          adminId: admin.id,
+          actorName,
+          actorEmail,
+          deductionType: isPartialWithholding ? input.deductionType : null,
+          reason: isPartialWithholding ? reason : null,
+          withheldAmount: isPartialWithholding ? withheldAmount : null,
+          refundAmount: isPartialWithholding ? refundAmount : null,
+        },
+      });
+
+      return tx.booking.findUniqueOrThrow({
+        where: { id: bookingId },
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          wheelchair: true,
+          payment: true,
+          invoice: true,
+          depositAuditLogs: { orderBy: { createdAt: "desc" } },
+        },
+      });
+    });
+
+    await notifyDepositUpdated({
+      bookingId: updated.id,
+      customerEmail: updated.user?.email,
+      customerName: updated.user?.name ?? "Customer",
+      whatsappNumber: updated.whatsappNumber,
+      securityDeposit: Number(updated.securityDeposit),
+      depositStatus: updated.depositStatus as
+        | "COLLECTED"
+        | "REFUNDED"
+        | "PARTIALLY_WITHHELD",
+      deductionReason: updated.depositDeductionReason,
+      withheldAmount: updated.depositWithheldAmount
+        ? Number(updated.depositWithheldAmount)
+        : null,
+      refundAmount: updated.depositRefundAmount
+        ? Number(updated.depositRefundAmount)
+        : null,
+    });
 
     return this.withCommunicationMetadata(
       updated as unknown as Record<string, unknown>,

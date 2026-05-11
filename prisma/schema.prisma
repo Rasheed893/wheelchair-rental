@@ -47,6 +47,22 @@ enum IdDocumentType {
   PASSPORT
 }
 
+enum DepositStatus {
+  PENDING
+  COLLECTED
+  REFUNDED
+  PARTIALLY_WITHHELD
+}
+
+enum DepositDeductionType {
+  PHYSICAL_DAMAGE
+  LOST_CHARGER
+  MISSING_ACCESSORIES
+  BATTERY_DAMAGE
+  THEFT_OR_LOSS
+  OTHER
+}
+
 enum BookingPaymentStatus {
   PENDING
   PAID
@@ -95,10 +111,6 @@ model User {
   name          String
   phone         String?
   whatsappNumber String?
-  whatsappVerifiedAt DateTime?
-  whatsappOtpHash String?
-  whatsappOtpExpiresAt DateTime?
-  whatsappOtpAttempts Int       @default(0)
   role          Role      @default(CUSTOMER)
   emailVerified Boolean   @default(false)
   createdAt     DateTime  @default(now())
@@ -110,6 +122,7 @@ model User {
 
   @@index([email])
   @@index([role])
+  @@index([whatsappNumber])
   @@map("users")
 }
 
@@ -171,13 +184,20 @@ model Booking {
   termsAcceptedAt DateTime?
   termsVersion    String?
   whatsappNumber  String?
-  whatsappVerifiedAt DateTime?
-  whatsappOtpHash String?
-  whatsappOtpExpiresAt DateTime?
-  whatsappOtpAttempts Int       @default(0)
   idDocumentType  IdDocumentType?
   idDocumentUrl   String?
   idDocumentUploadedAt DateTime?
+  securityDeposit Decimal       @db.Decimal(10, 2) @default(500)
+  depositStatus   DepositStatus @default(PENDING)
+  depositCollectedAt DateTime?
+  depositRefundedAt DateTime?
+  depositDeductionType DepositDeductionType?
+  depositDeductionReason String?
+  depositWithheldAmount Decimal?     @db.Decimal(10, 2)
+  depositRefundAmount Decimal?       @db.Decimal(10, 2)
+  depositCollectedBy String?
+  depositRefundedBy String?
+  contractPdfUrl String?
   reservationExpiresAt DateTime?
   paidAt          DateTime?
   cancelledAt     DateTime?
@@ -190,14 +210,40 @@ model Booking {
   wheelchair      Wheelchair    @relation(fields: [wheelchairId], references: [id], onDelete: Restrict)
   payment         Payment?
   invoice         Invoice?
+  depositAuditLogs DepositAuditLog[]
 
   // Composite index to speed up availability queries
   @@index([wheelchairId, startDate, endDate])
   @@index([userId])
   @@index([status])
+  @@index([whatsappNumber])
+  @@index([depositStatus])
   @@index([startDate])
   @@index([endDate])
   @@map("bookings")
+}
+
+model DepositAuditLog {
+  id        String         @id @default(cuid())
+  bookingId String
+  action    String
+  oldStatus DepositStatus?
+  newStatus DepositStatus?
+  adminId   String?
+  actorName String?
+  actorEmail String?
+  deductionType DepositDeductionType?
+  reason    String?
+  withheldAmount Decimal?    @db.Decimal(10, 2)
+  refundAmount Decimal?      @db.Decimal(10, 2)
+  createdAt DateTime       @default(now())
+
+  booking   Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([adminId])
+  @@index([createdAt])
+  @@map("deposit_audit_logs")
 }
 
 // ─────────────────────────────────────────────

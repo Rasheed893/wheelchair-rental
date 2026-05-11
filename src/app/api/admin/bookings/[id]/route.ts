@@ -7,12 +7,12 @@ import {
   notFound,
   serverError,
 } from "@/lib/middleware";
-import type { BookingStatus } from "@prisma/client";
+import type { BookingStatus, DepositDeductionType } from "@prisma/client";
 
 // GET /api/admin/bookings/:id — Admin view single booking
 export const GET = withAdminAuth(async (_req, { params }) => {
   try {
-    const booking = await bookingService.getById(params.id);
+    const booking = await bookingService.adminGetById(params.id);
     if (!booking) return notFound("Booking");
     return ok(booking);
   } catch (err) {
@@ -31,6 +31,28 @@ export const PATCH = withAdminAuth(async (req, { params, user }) => {
         ? await bookingService.adminUpdateStatus(
             params.id,
             body.status as BookingStatus,
+          )
+        : action === "deposit-collected" ||
+          action === "deposit-refunded" ||
+          action === "deposit-partially-withheld" ||
+          action === "deposit-withheld"
+        ? await bookingService.adminUpdateDeposit(
+            params.id,
+            {
+              action,
+              deductionType: body.deductionType as
+                | DepositDeductionType
+                | undefined,
+              reason:
+                typeof body.reason === "string" ? body.reason : undefined,
+              handledBy:
+                typeof body.handledBy === "string" ? body.handledBy : undefined,
+              withheldAmount:
+                body.withheldAmount === undefined || body.withheldAmount === ""
+                  ? undefined
+                  : Number(body.withheldAmount),
+            },
+            user,
           )
         : await bookingService.cancel(
             params.id,

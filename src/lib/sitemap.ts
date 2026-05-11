@@ -13,6 +13,8 @@ import { backfillMissingWheelchairSlugs } from "@/lib/slug";
 
 type SitemapEntry = {
   path: string;
+  locales?: Locale[];
+  alternatePaths?: Partial<Record<Locale, string>>;
   lastModified?: Date;
   priority?: number;
   changeFrequency?: string;
@@ -22,6 +24,39 @@ type WheelchairSitemapEntry = {
   slug: string;
   updatedAt: Date;
 };
+
+const landingSitemapEntries: SitemapEntry[] = [
+  {
+    path: "/landing/wheelchair-rental-dubai",
+    locales: ["en"],
+    alternatePaths: { ar: "/landing/wheelchair-rental-uae" },
+    priority: 0.8,
+    changeFrequency: "weekly",
+    lastModified: new Date(),
+  },
+  {
+    path: "/landing/dubai-airport-wheelchair-rental",
+    locales: ["en"],
+    priority: 0.8,
+    changeFrequency: "weekly",
+    lastModified: new Date(),
+  },
+  {
+    path: "/landing/post-surgery-wheelchair-rental",
+    locales: ["en"],
+    priority: 0.8,
+    changeFrequency: "weekly",
+    lastModified: new Date(),
+  },
+  {
+    path: "/landing/wheelchair-rental-uae",
+    locales: ["ar"],
+    alternatePaths: { en: "/landing/wheelchair-rental-dubai" },
+    priority: 0.8,
+    changeFrequency: "weekly",
+    lastModified: new Date(),
+  },
+];
 
 const XML_HEADER = '<?xml version="1.0" encoding="UTF-8"?>';
 
@@ -82,6 +117,7 @@ export function getPageSitemapEntries(): SitemapEntry[] {
       changeFrequency: "daily",
       lastModified: new Date(),
     },
+    ...landingSitemapEntries,
   ];
 }
 
@@ -103,21 +139,35 @@ export async function getSitemapIndexEntries() {
   return entries;
 }
 
-/**
- * FIXED: Accepts base (non-localized) path
- */
-function renderAlternateLinks(basePath: string) {
-  return locales
-    .map((locale) => {
-      const href = buildLocalizedUrl(locale, basePath);
+function renderAlternateLinks(
+  basePath: string,
+  entryLocales: readonly Locale[],
+  alternatePaths?: Partial<Record<Locale, string>>,
+) {
+  const alternateMap = new Map<Locale, string>();
+
+  entryLocales.forEach((locale) => alternateMap.set(locale, basePath));
+
+  Object.entries(alternatePaths ?? {}).forEach(([locale, path]) => {
+    if (path && locales.includes(locale as Locale)) {
+      alternateMap.set(locale as Locale, path);
+    }
+  });
+
+  const links = Array.from(alternateMap.entries())
+    .map(([locale, path]) => {
+      const href = buildLocalizedUrl(locale, path);
       const hreflang = locale === "ar" ? "ar-AE" : "en-AE";
 
       return `<xhtml:link rel="alternate" hreflang="${hreflang}" href="${href}" />`;
     })
-    .concat(
-      `<xhtml:link rel="alternate" hreflang="x-default" href="${buildLocalizedUrl("en", basePath)}" />`,
-    )
     .join("");
+
+  const xDefaultPath =
+    alternateMap.get("en") ?? alternateMap.values().next().value ?? basePath;
+  const xDefault = `<xhtml:link rel="alternate" hreflang="x-default" href="${buildLocalizedUrl("en", xDefaultPath)}" />`;
+
+  return links + xDefault;
 }
 
 export function renderUrlSet(entries: SitemapEntry[]): string {
@@ -131,8 +181,9 @@ export function renderUrlSet(entries: SitemapEntry[]): string {
       const changefreq = entry.changeFrequency
         ? `<changefreq>${entry.changeFrequency}</changefreq>`
         : "";
+      const entryLocales = entry.locales ?? locales;
 
-      return locales
+      return entryLocales
         .map((locale) => {
           const localizedPath = buildLocalizedPath(locale, entry.path);
 
@@ -141,7 +192,7 @@ export function renderUrlSet(entries: SitemapEntry[]): string {
 ${lastmod}
 ${changefreq}
 ${priority}
-${renderAlternateLinks(entry.path)}
+${renderAlternateLinks(entry.path, entryLocales, entry.alternatePaths)}
 </url>`;
         })
         .join("");
@@ -176,7 +227,7 @@ export function renderWheelchairUrlSet(
 ${lastmod}
 <changefreq>weekly</changefreq>
 <priority>0.8</priority>
-${renderAlternateLinks(basePath)}
+${renderAlternateLinks(basePath, locales)}
 </url>`;
         })
         .join("");

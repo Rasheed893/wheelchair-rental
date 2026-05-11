@@ -133,27 +133,16 @@ export default function BookPage({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [deliveryCity, setDeliveryCity] = useState<(typeof DELIVERY_CITIES)[number]>(
-    "DUBAI",
-  );
-  const [deliveryWindow, setDeliveryWindow] = useState<
-    (typeof DELIVERY_WINDOWS)[number]
-  >("MORNING");
+  const [deliveryCity, setDeliveryCity] =
+    useState<(typeof DELIVERY_CITIES)[number]>("DUBAI");
+  const [deliveryWindow, setDeliveryWindow] =
+    useState<(typeof DELIVERY_WINDOWS)[number]>("MORNING");
   const [bookingPaymentStatus, setBookingPaymentStatus] = useState<
     "PENDING" | "PAID" | "EXPIRED" | null
   >(null);
   const [customerName, setCustomerName] = useState("");
   const [phoneCountryCode, setPhoneCountryCode] = useState("+971");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [verifiedWhatsappNumber, setVerifiedWhatsappNumber] = useState("");
-  const [whatsappVerifiedAt, setWhatsappVerifiedAt] = useState<string | null>(
-    null,
-  );
-  const [otpCode, setOtpCode] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [otpError, setOtpError] = useState<string | null>(null);
-  const [otpUnavailable, setOtpUnavailable] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "CASH">(
@@ -190,22 +179,6 @@ export default function BookPage({
   const activeSecurityDeposit = getSecurityDeposit(
     existingBooking?.wheelchair?.category ?? wheelchair?.category,
   );
-  const currentWhatsappNumber = useMemo(() => {
-    if (!phoneNumber.trim()) {
-      return "";
-    }
-
-    try {
-      return buildE164Phone(phoneCountryCode, phoneNumber);
-    } catch {
-      return "";
-    }
-  }, [phoneCountryCode, phoneNumber]);
-  const whatsappIsVerified =
-    Boolean(whatsappVerifiedAt) &&
-    verifiedWhatsappNumber === currentWhatsappNumber &&
-    Boolean(currentWhatsappNumber);
-
   const bookingPath = wheelchair?.slug
     ? buildWheelchairBookingPath(wheelchair.slug)
     : `/wheelchairs/${id}/book`;
@@ -276,7 +249,9 @@ export default function BookPage({
     }
 
     const query = bookingId ? `?bookingId=${bookingId}` : "";
-    router.replace(`/${locale}${buildWheelchairBookingPath(wheelchair.slug)}${query}`);
+    router.replace(
+      `/${locale}${buildWheelchairBookingPath(wheelchair.slug)}${query}`,
+    );
   }, [bookingId, id, locale, router, wheelchair?.slug]);
 
   useEffect(() => {
@@ -297,92 +272,14 @@ export default function BookPage({
             setDeliveryWindow(data.data.deliveryWindow);
             setDeliveryAddress(data.data.deliveryAddress);
             setDeliveryNotes(data.data.deliveryNotes ?? "");
-            setVerifiedWhatsappNumber(data.data.whatsappNumber ?? "");
-            setWhatsappVerifiedAt(data.data.whatsappVerifiedAt ?? null);
             setIdDocumentReceived(Boolean(data.data.idDocumentUploadedAt));
           }
         });
     }
   }, [bookingIdState]);
 
-  function getNormalizedWhatsappNumber() {
+  function getNormalizedContactNumber() {
     return buildE164Phone(phoneCountryCode, phoneNumber);
-  }
-
-  async function handleSendOtp() {
-    setOtpLoading(true);
-    setOtpError(null);
-    setOtpUnavailable(false);
-    setError(null);
-
-    try {
-      const normalizedPhone = getNormalizedWhatsappNumber();
-      const response = await fetch("/api/booking/whatsapp-otp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: normalizedPhone }),
-      });
-      const payload = await response.json();
-
-      if (!payload.success) {
-        throw new Error(payload.error ?? "Unable to send WhatsApp code.");
-      }
-
-      if (payload.data?.verificationUnavailable) {
-        setVerifiedWhatsappNumber("");
-        setWhatsappVerifiedAt(null);
-        setOtpSent(false);
-        setOtpCode("");
-        setOtpUnavailable(true);
-        return;
-      }
-
-      setVerifiedWhatsappNumber("");
-      setWhatsappVerifiedAt(null);
-      setOtpSent(true);
-      setOtpCode("");
-    } catch (otpSendError) {
-      setOtpError(
-        otpSendError instanceof Error
-          ? otpSendError.message
-          : "Unable to send WhatsApp code.",
-      );
-    } finally {
-      setOtpLoading(false);
-    }
-  }
-
-  async function handleVerifyOtp() {
-    setOtpLoading(true);
-    setOtpError(null);
-    setError(null);
-
-    try {
-      const normalizedPhone = getNormalizedWhatsappNumber();
-      const response = await fetch("/api/booking/whatsapp-otp/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: normalizedPhone, code: otpCode }),
-      });
-      const payload = await response.json();
-
-      if (!payload.success) {
-        throw new Error(payload.error ?? "Unable to verify WhatsApp code.");
-      }
-
-      setVerifiedWhatsappNumber(payload.data.phoneNumber);
-      setWhatsappVerifiedAt(payload.data.verifiedAt);
-      setOtpSent(false);
-      setOtpCode("");
-    } catch (otpVerifyError) {
-      setOtpError(
-        otpVerifyError instanceof Error
-          ? otpVerifyError.message
-          : "Unable to verify WhatsApp code.",
-      );
-    } finally {
-      setOtpLoading(false);
-    }
   }
 
   async function uploadIdDocument() {
@@ -437,10 +334,12 @@ export default function BookPage({
     }
     let normalizedWhatsappNumber = "";
     try {
-      normalizedWhatsappNumber = getNormalizedWhatsappNumber();
+      normalizedWhatsappNumber = getNormalizedContactNumber();
     } catch (phoneError) {
       setError(
-        phoneError instanceof Error ? phoneError.message : "Phone number is invalid",
+        phoneError instanceof Error
+          ? phoneError.message
+          : "Phone number is invalid",
       );
       return;
     }
@@ -508,7 +407,9 @@ export default function BookPage({
       setBookingId(newBookingId);
 
       if (paymentMethod === "CASH") {
-        router.push(`/${locale}/payment/success?bookingId=${newBookingId}&method=CASH`);
+        router.push(
+          `/${locale}/payment/success?bookingId=${newBookingId}&method=CASH`,
+        );
         return;
       }
 
@@ -593,16 +494,9 @@ export default function BookPage({
                     onChange={(e) => setCustomerName(e.target.value)}
                   />
                   <div className="min-w-0 rounded-xl border border-slate-200 p-3">
-                    <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-sm font-medium text-slate-700">
-                        WhatsApp number
-                      </p>
-                      {whatsappIsVerified && (
-                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                          WhatsApp verified
-                        </span>
-                      )}
-                    </div>
+                    <p className="mb-2 text-sm font-medium text-slate-700">
+                      Contact WhatsApp / phone number
+                    </p>
                     <div className="grid min-w-0 gap-2 sm:grid-cols-[130px_minmax(0,1fr)]">
                       <div>
                         <input
@@ -612,12 +506,7 @@ export default function BookPage({
                           placeholder="+971"
                           aria-label="Country code"
                           value={phoneCountryCode}
-                          onChange={(e) => {
-                          setPhoneCountryCode(e.target.value);
-                          setWhatsappVerifiedAt(null);
-                          setVerifiedWhatsappNumber("");
-                          setOtpUnavailable(false);
-                        }}
+                          onChange={(e) => setPhoneCountryCode(e.target.value)}
                         />
                         <datalist id="booking-country-codes">
                           {COUNTRY_DIAL_CODES.map((country) => (
@@ -632,66 +521,12 @@ export default function BookPage({
                       </div>
                       <input
                         className="input-field min-w-0"
-                        placeholder="WhatsApp number"
+                        placeholder="Contact number"
                         inputMode="tel"
                         value={phoneNumber}
-                        onChange={(e) => {
-                          setPhoneNumber(e.target.value);
-                          setWhatsappVerifiedAt(null);
-                          setVerifiedWhatsappNumber("");
-                          setOtpUnavailable(false);
-                        }}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
                       />
                     </div>
-                    {!whatsappIsVerified && (
-                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                        {isAr
-                          ? "لم يتم التحقق من واتساب. قد يؤدي ذلك إلى تأخير تأكيد الحجز."
-                          : "WhatsApp not verified. This may delay booking confirmation."}
-                      </div>
-                    )}
-                    <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_110px]">
-                      <button
-                        type="button"
-                        onClick={handleSendOtp}
-                        disabled={otpLoading || !phoneNumber.trim()}
-                        className="btn-outline w-full justify-center px-4 py-2 text-sm"
-                      >
-                        {otpLoading ? "Sending..." : "Send WhatsApp OTP"}
-                      </button>
-                      {otpSent && (
-                        <>
-                          <input
-                            className="input-field w-full"
-                            placeholder="6-digit code"
-                            inputMode="numeric"
-                            maxLength={6}
-                            value={otpCode}
-                            onChange={(e) =>
-                              setOtpCode(e.target.value.replace(/\D/g, ""))
-                            }
-                          />
-                          <button
-                            type="button"
-                            onClick={handleVerifyOtp}
-                            disabled={otpLoading || otpCode.length !== 6}
-                            className="btn-primary w-full justify-center px-4 py-2 text-sm"
-                          >
-                            Verify
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    {otpError && (
-                      <p className="mt-2 text-xs text-red-600">{otpError}</p>
-                    )}
-                    {otpUnavailable && (
-                      <p className="mt-2 text-xs text-slate-500">
-                        {isAr
-                          ? "التحقق غير متاح حاليا. يمكنك متابعة الحجز."
-                          : "Verification unavailable right now. You can continue booking."}
-                      </p>
-                    )}
                     <p className="mt-2 text-xs text-slate-500">
                       UAE and international numbers are supported and saved in
                       E.164 format.
@@ -737,8 +572,8 @@ export default function BookPage({
                     ))}
                   </select>
                   <p className="text-xs text-slate-500">
-                    Free delivery within Ajman, Sharjah, Dubai & UAQ.
-                    Additional fee applies for other emirates.
+                    Free delivery within Ajman, Sharjah, Dubai & UAQ. Additional
+                    fee applies for other emirates.
                   </p>
                   <textarea
                     className="input-field min-h-24"
@@ -833,13 +668,13 @@ export default function BookPage({
                         and rental agreement requirements.
                       </span>
                     </label>
-                    <button
+                    {/* <button
                       type="button"
                       onClick={() => setTermsOpen(true)}
                       className="mt-2 text-xs font-medium text-primary-700 underline"
                     >
                       View terms without leaving this booking
-                    </button>
+                    </button> */}
                   </div>
                 </div>
 
@@ -990,7 +825,10 @@ export default function BookPage({
                   <div className="flex justify-between">
                     <span className="text-slate-500">From</span>
                     <span className="font-medium">
-                      {format(new Date(existingBooking.startDate), "MMM d, yyyy")}
+                      {format(
+                        new Date(existingBooking.startDate),
+                        "MMM d, yyyy",
+                      )}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -1074,10 +912,9 @@ export default function BookPage({
                 and provide a digital Emirates ID or Passport copy.
               </p>
               <p>
-                WhatsApp OTP verification is optional and may help us confirm
-                your booking faster. Admin confirmation, where needed, is
-                normally completed within 24 hours. Delivery windows are
-                estimates.
+                Please provide a reachable contact number. Admin confirmation,
+                where needed, is normally completed within 24 hours. Delivery
+                windows are estimates.
               </p>
               <p>
                 The refundable security deposit is collected upon delivery and

@@ -12,17 +12,12 @@ export const GET = withAdminAuth(async (req) => {
     const paymentStatus = searchParams.get("paymentStatus") as
       | BookingPaymentStatus
       | null;
-    const whatsappVerification = searchParams.get("whatsappVerification") as
-      | "VERIFIED"
-      | "NOT_VERIFIED"
-      | null;
     const query = searchParams.get("query")?.trim() ?? "";
 
     const result = await bookingService.adminList(
       {
         ...(status ? { status } : {}),
         ...(paymentStatus ? { paymentStatus } : {}),
-        ...(whatsappVerification ? { whatsappVerification } : {}),
         ...(query ? { query } : {}),
       },
       {

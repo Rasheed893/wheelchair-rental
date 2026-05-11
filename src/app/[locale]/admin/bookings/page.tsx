@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { format } from "date-fns";
 import type {
   BookingPaymentStatus,
   BookingStatus,
+  DepositStatus,
   PaymentMethod,
 } from "@prisma/client";
 import AdminSidebar from "@/components/layout/AdminSidebar";
@@ -21,9 +23,10 @@ type AdminBooking = {
   paymentStatus: BookingPaymentStatus;
   phoneNumber: string;
   whatsappNumber?: string | null;
-  whatsappVerifiedAt?: string | Date | null;
   idDocumentType?: string | null;
   idDocumentUploadedAt?: string | Date | null;
+  securityDeposit?: number | string;
+  depositStatus?: DepositStatus;
   createdAt: string | Date;
   user?: {
     name?: string | null;
@@ -62,12 +65,6 @@ const PAYMENT_STATUSES: Array<BookingPaymentStatus | "ALL"> = [
   "PAID",
 ];
 
-const WHATSAPP_VERIFICATION_STATUSES = [
-  "ALL",
-  "VERIFIED",
-  "NOT_VERIFIED",
-] as const;
-
 const NEXT_STATUS_OPTIONS: Record<BookingStatus, BookingStatus[]> = {
   PENDING: ["CONFIRMED"],
   CONFIRMED: ["OUT_FOR_DELIVERY"],
@@ -90,37 +87,12 @@ function getPaymentLabel(booking: AdminBooking) {
   return "Pending";
 }
 
-function WhatsAppVerificationBadge({ booking }: { booking: AdminBooking }) {
-  const verified = Boolean(booking.whatsappVerifiedAt);
-
-  return (
-    <span
-      className={
-        verified
-          ? "inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
-          : "inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
-      }
-    >
-      <span
-        className={
-          verified
-            ? "h-2 w-2 rounded-full bg-emerald-500"
-            : "h-2 w-2 rounded-full bg-amber-500"
-        }
-      />
-      {verified ? "WhatsApp Verified" : "Not Verified"}
-    </span>
-  );
-}
-
 export default function AdminBookingsPage() {
   const params = useParams();
   const locale = params.locale as string;
   const [bookings, setBookings] = useState<AdminBooking[]>([]);
   const [orderStatus, setOrderStatus] = useState<string>("ALL");
   const [paymentStatus, setPaymentStatus] = useState<string>("ALL");
-  const [whatsappVerification, setWhatsappVerification] =
-    useState<string>("ALL");
   const [query, setQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [loading, setLoading] = useState(true);
@@ -148,9 +120,6 @@ export default function AdminBookingsPage() {
     if (paymentStatus !== "ALL") {
       params.set("paymentStatus", paymentStatus);
     }
-    if (whatsappVerification !== "ALL") {
-      params.set("whatsappVerification", whatsappVerification);
-    }
     if (query.trim()) {
       params.set("query", query.trim());
     }
@@ -176,7 +145,7 @@ export default function AdminBookingsPage() {
       ),
     );
     setLoading(false);
-  }, [orderStatus, page, paymentStatus, query, whatsappVerification]);
+  }, [orderStatus, page, paymentStatus, query]);
 
   useEffect(() => {
     // This page synchronizes filters/pagination to the latest API response.
@@ -286,7 +255,7 @@ export default function AdminBookingsPage() {
             </p>
           </div>
 
-          <div className="card mb-6 grid gap-4 p-5 lg:grid-cols-5">
+          <div className="card mb-6 grid gap-4 p-5 lg:grid-cols-4">
             <div className="lg:col-span-2">
               <label className="mb-1.5 block text-sm font-medium text-slate-700">
                 Search by booking ID or email
@@ -351,25 +320,6 @@ export default function AdminBookingsPage() {
               </select>
             </div>
 
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                WhatsApp
-              </label>
-              <select
-                value={whatsappVerification}
-                onChange={(event) => {
-                  setPage(1);
-                  setWhatsappVerification(event.target.value);
-                }}
-                className="input-field"
-              >
-                {WHATSAPP_VERIFICATION_STATUSES.map((value) => (
-                  <option key={value} value={value}>
-                    {value === "NOT_VERIFIED" ? "NOT VERIFIED" : value}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
 
           {message && (
@@ -439,12 +389,17 @@ export default function AdminBookingsPage() {
                           <p className="font-semibold text-slate-900">
                             {formatAED(Number(booking.totalPrice))}
                           </p>
+                          <p className="text-xs text-slate-500">
+                            Deposit{" "}
+                            {formatAED(Number(booking.securityDeposit ?? 0))} -{" "}
+                            {booking.depositStatus ?? "PENDING"}
+                          </p>
                           <p className="break-words">
                             {booking.paymentMethod} · {getPaymentLabel(booking)}
                           </p>
-                          <div>
-                            <WhatsAppVerificationBadge booking={booking} />
-                          </div>
+                          <p className="break-words text-xs text-slate-500">
+                            WhatsApp {booking.whatsappNumber ?? "not provided"}
+                          </p>
                           <p className="text-xs text-slate-500">
                             ID{" "}
                             {booking.idDocumentUploadedAt
@@ -457,6 +412,13 @@ export default function AdminBookingsPage() {
                         </div>
 
                         <div className="mt-4 flex flex-col gap-2">
+                          <Link
+                            href={`/${locale}/admin/bookings/${booking.id}`}
+                            className="btn-outline w-full justify-center py-2 text-xs"
+                          >
+                            Details
+                          </Link>
+
                           {booking.paymentMethod === "CASH" &&
                             booking.paymentStatus !== "PAID" && (
                               <button
@@ -533,6 +495,7 @@ export default function AdminBookingsPage() {
                     <th className="px-4 py-3">Product</th>
                     <th className="px-4 py-3">Dates</th>
                     <th className="px-4 py-3">Total</th>
+                    <th className="px-4 py-3">Deposit</th>
                     <th className="px-4 py-3">Payment</th>
                     <th className="px-4 py-3">Order status</th>
                     <th className="px-4 py-3">Created</th>
@@ -543,7 +506,7 @@ export default function AdminBookingsPage() {
                   {loading
                     ? Array.from({ length: 5 }, (_, index) => (
                         <tr key={index} className="animate-pulse">
-                          {Array.from({ length: 9 }, (_, cell) => (
+                          {Array.from({ length: 10 }, (_, cell) => (
                             <td key={cell} className="px-4 py-4">
                               <div className="h-3 w-3/4 rounded bg-slate-100" />
                             </td>
@@ -577,8 +540,8 @@ export default function AdminBookingsPage() {
                               <div className="break-words text-xs text-slate-400">
                                 {booking.phoneNumber}
                               </div>
-                              <div className="mt-2">
-                                <WhatsAppVerificationBadge booking={booking} />
+                              <div className="mt-2 break-words text-xs text-slate-500">
+                                WhatsApp {booking.whatsappNumber ?? "not provided"}
                               </div>
                               <div className="mt-1 text-xs text-slate-500">
                                 ID{" "}
@@ -596,6 +559,14 @@ export default function AdminBookingsPage() {
                             </td>
                             <td className="px-4 py-4 font-semibold text-slate-900">
                               {formatAED(Number(booking.totalPrice))}
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="font-semibold text-slate-900">
+                                {formatAED(Number(booking.securityDeposit ?? 0))}
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                {booking.depositStatus ?? "PENDING"}
+                              </div>
                             </td>
                             <td className="px-4 py-4">
                               <div className="font-medium text-slate-900">
@@ -618,6 +589,13 @@ export default function AdminBookingsPage() {
                             </td>
                             <td className="px-4 py-4">
                               <div className="flex min-w-[220px] flex-col gap-2">
+                                <Link
+                                  href={`/${locale}/admin/bookings/${booking.id}`}
+                                  className="btn-outline justify-center py-2 text-xs"
+                                >
+                                  Details
+                                </Link>
+
                                 {booking.paymentMethod === "CASH" &&
                                   booking.paymentStatus !== "PAID" && (
                                     <button

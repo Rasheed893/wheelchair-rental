@@ -23,7 +23,7 @@ const englishSections = [
   {
     title: "Booking And Verification",
     items: [
-      "WhatsApp number verification by OTP is optional and may help BioMobility confirm the booking faster.",
+      "A reachable contact WhatsApp or phone number is required so BioMobility can coordinate the booking.",
       "Where admin confirmation is required, BioMobility aims to confirm the booking within 24 hours.",
       "Delivery windows are estimates and may be affected by traffic, building access, weather, or operational constraints.",
       "The customer must sign the rental agreement upon delivery.",

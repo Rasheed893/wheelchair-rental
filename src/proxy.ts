@@ -26,8 +26,24 @@ const GUEST_ONLY_PATTERNS = [
   /^\/[a-z]{2}\/auth\/register/,
 ];
 
+const PUBLIC_ROUTE_PATTERNS = [
+  /^\/sitemap\.xml$/,
+  /^\/sitemap$/,
+  /^\/sitemaps(?:\/|$)/,
+  /^\/robots\.txt$/,
+  /^\/_next(?:\/|$)/,
+  /^\/favicon\.ico$/,
+  /^\/branding(?:\/|$)/,
+  /^\/Landing(?:\/|$)/,
+];
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  if (PUBLIC_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname))) {
+    return NextResponse.next();
+  }
+
   const token = req.cookies.get(COOKIE_NAME)?.value;
   const payload = token ? await verifyToken(token) : null;
 
@@ -83,6 +99,6 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next|_vercel|monitoring|sitemaps|sitemap|sitemap\\.xml|robots\\.txt|.*\\..*).*)",
+    "/((?!_next|_vercel|monitoring|sitemaps|sitemap|sitemap\\.xml|robots\\.txt|favicon\\.ico|branding|Landing|.*\\..*).*)",
   ],
 };

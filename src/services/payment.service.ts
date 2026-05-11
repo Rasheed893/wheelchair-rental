@@ -15,6 +15,7 @@ import {
   getCommunicationPriority,
   getCommunicationRisk,
 } from "@/lib/communication-risk";
+import { notifyBookingReceived } from "@/lib/booking-notifications";
 
 const CURRENCY = "aed";
 
@@ -529,6 +530,12 @@ export class PaymentService {
       });
     }
 
+    await notifyBookingReceived({
+      bookingId: booking.id,
+      whatsappNumber: booking.whatsappNumber,
+      securityDeposit: Number(booking.securityDeposit),
+    });
+
     return {
       processed: true,
       ignored: false,
@@ -707,6 +714,12 @@ export class PaymentService {
       });
     }
 
+    await notifyBookingReceived({
+      bookingId,
+      whatsappNumber: booking.whatsappNumber,
+      securityDeposit: Number(booking.securityDeposit),
+    });
+
     const updatedBooking = await prisma.booking.findUnique({
       where: { id: bookingId },
     });
@@ -864,17 +877,16 @@ export class PaymentService {
 
     const bookingCommunication = await prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { whatsappNumber: true, whatsappVerifiedAt: true },
+      select: { whatsappNumber: true },
     });
 
     logger.info("[PAYMENT EMAIL] Communication priority", {
       bookingId,
       communicationRisk: getCommunicationRisk(
         bookingCommunication?.whatsappNumber,
-        bookingCommunication?.whatsappVerifiedAt,
       ),
       communicationPriority: getCommunicationPriority(
-        bookingCommunication?.whatsappVerifiedAt,
+        bookingCommunication?.whatsappNumber,
       ),
     });
 

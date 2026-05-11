@@ -63,4 +63,42 @@ export function getInvoiceRawUrl(publicId: string) {
   });
 }
 
+export function parseAuthenticatedCloudinaryReference(value?: string | null) {
+  const prefix = "cloudinary:authenticated:";
+  const trimmed = value?.trim();
+  if (!trimmed?.startsWith(prefix)) {
+    return null;
+  }
+
+  const rest = trimmed.slice(prefix.length);
+  const separatorIndex = rest.indexOf(":");
+  if (separatorIndex <= 0) {
+    return null;
+  }
+
+  return {
+    resourceType: rest.slice(0, separatorIndex),
+    publicId: rest.slice(separatorIndex + 1),
+  };
+}
+
+export function getAuthenticatedCloudinaryUrl({
+  publicId,
+  resourceType,
+  attachment,
+}: {
+  publicId: string;
+  resourceType: string;
+  attachment?: boolean;
+}) {
+  return cloudinary.url(publicId, {
+    resource_type: resourceType,
+    type: "authenticated",
+    secure: true,
+    sign_url: true,
+    expires_at: Math.floor(Date.now() / 1000) + 10 * 60,
+    ...(attachment ? { flags: "attachment" } : {}),
+  });
+}
+
 export default cloudinary;
