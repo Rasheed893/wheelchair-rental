@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import LandingPage from "@/components/landing/LandingPage";
+import { getLandingProducts } from "@/lib/landing-products";
 import { buildLandingMetadata, landingPages } from "@/lib/landing-pages";
 
 const data = landingPages.arabic;
@@ -33,5 +34,6 @@ export default async function ArabicWheelchairRentalUaePage({ params }: Props) {
   }
 
   setRequestLocale(locale);
-  return <LandingPage data={data} />;
+  const products = await getLandingProducts(data.key);
+  return <LandingPage data={data} products={products} />;
 }

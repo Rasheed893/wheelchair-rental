@@ -1,13 +1,15 @@
+import Image from "next/image";
 import Link from "next/link";
 import { clsx } from "clsx";
 import LandingImage from "@/components/landing/LandingImage";
 import {
   getLandingContactLinks,
-  type LandingEquipmentItem,
   type LandingFaqItem,
   type LandingPageData,
 } from "@/lib/landing-pages";
-import type { Locale } from "@/lib/seo";
+import { formatAED } from "@/lib/currency";
+import type { LandingProduct } from "@/lib/landing-products";
+import { buildWheelchairBookingPath, type Locale } from "@/lib/seo";
 
 interface LandingCtaButtonsProps {
   locale: Locale;
@@ -170,13 +172,15 @@ export function LandingEquipmentCards({
   locale,
   title,
   subtitle,
-  items,
+  products,
 }: {
   locale: Locale;
   title: string;
   subtitle: string;
-  items: LandingEquipmentItem[];
+  products: LandingProduct[];
 }) {
+  const isAr = locale === "ar";
+
   return (
     <section className="bg-slate-50 py-14 md:py-20">
       <div className="page-container">
@@ -186,33 +190,143 @@ export function LandingEquipmentCards({
           </h2>
           <p className="mt-3 leading-7 text-slate-600">{subtitle}</p>
         </div>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {items.map((item) => (
-            <Link
-              key={item.title}
-              href={`/${locale}/wheelchairs`}
-              className="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md"
-            >
-              <div className="relative aspect-[4/3] bg-slate-100">
-                <LandingImage
-                  imageKey={item.imageKey}
-                  alt={item.title}
-                  sizes="(min-width: 1024px) 20vw, (min-width: 640px) 50vw, 100vw"
-                />
-              </div>
-              <div className="p-4">
-                <h3 className="text-lg font-semibold text-slate-950">
-                  {item.title}
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  {item.description}
-                </p>
-              </div>
-            </Link>
-          ))}
-        </div>
+
+        {products.length > 0 ? (
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {products.map((product) => (
+              <LandingProductCard
+                key={product.id}
+                product={product}
+                locale={locale}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="text-xl font-semibold text-slate-950">
+              {isAr
+                ? "يتم تحديث المعدات حاليا"
+                : "Equipment is being updated"}
+            </h3>
+            <p className="mt-2 leading-7 text-slate-600">
+              {isAr
+                ? "يرجى التواصل معنا لمساعدتك في اختيار المعدات المناسبة."
+                : "Please contact us and we will help you arrange the right equipment."}
+            </p>
+            <div className="mt-5">
+              <LandingCtaButtons
+                locale={locale}
+                primaryLabel={isAr ? "تصفح المعدات" : "Browse equipment"}
+                secondaryLabel={isAr ? "اتصل الآن" : "Call Now"}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </section>
+  );
+}
+
+const CATEGORY_LABELS: Record<string, { en: string; ar: string }> = {
+  STANDARD: { en: "Standard", ar: "قياسي" },
+  ELECTRIC: { en: "Electric", ar: "كهربائي" },
+  PEDIATRIC: { en: "Pediatric", ar: "أطفال" },
+  BARIATRIC: { en: "Bariatric", ar: "تحمل وزن عال" },
+  TRANSPORT: { en: "Transport", ar: "نقل" },
+};
+
+const STATUS_LABELS: Record<string, { en: string; ar: string }> = {
+  AVAILABLE: { en: "Available", ar: "متاح" },
+  MAINTENANCE: { en: "Limited", ar: "توفر محدود" },
+};
+
+function LandingProductCard({
+  product,
+  locale,
+}: {
+  product: LandingProduct;
+  locale: Locale;
+}) {
+  const isAr = locale === "ar";
+  const name = isAr ? product.nameAr || product.name : product.name;
+  const categoryLabel =
+    CATEGORY_LABELS[product.category]?.[isAr ? "ar" : "en"] ??
+    product.category;
+  const statusLabel =
+    STATUS_LABELS[product.status]?.[isAr ? "ar" : "en"] ?? product.status;
+  const isAvailable = product.status === "AVAILABLE";
+  const productPath = `/${locale}${buildWheelchairBookingPath(
+    product.slug ?? product.id,
+  )}`;
+  const image = product.images[0];
+
+  return (
+    <Link
+      href={productPath}
+      className="group flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md"
+      aria-label={
+        isAr
+          ? `احجز ${name} بسعر ${formatAED(product.pricePerDay)} يوميا`
+          : `Book ${name} for ${formatAED(product.pricePerDay)} per day`
+      }
+    >
+      <div className="relative aspect-[4/3] bg-slate-100">
+        {image ? (
+          <Image
+            src={image}
+            alt={
+              isAr
+                ? `${name} للتأجير في الإمارات`
+                : `${name} rental equipment in the UAE`
+            }
+            fill
+            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover transition duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div
+            className="flex h-full items-center justify-center px-4 text-center text-sm font-semibold text-slate-400"
+            role="img"
+            aria-label={isAr ? `${name} بدون صورة` : `${name} without image`}
+          >
+            BioMobility
+          </div>
+        )}
+        <div className="absolute inset-x-0 top-3 flex items-center justify-between gap-2 px-3">
+          <span className="rounded-full bg-white/92 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur">
+            {categoryLabel}
+          </span>
+          <span
+            className={clsx(
+              "rounded-full px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur",
+              isAvailable
+                ? "bg-emerald-50/95 text-emerald-700"
+                : "bg-amber-50/95 text-amber-700",
+            )}
+          >
+            {statusLabel}
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col p-5">
+        <h3 className="line-clamp-2 text-lg font-semibold leading-6 text-slate-950">
+          {name}
+        </h3>
+        <div className="mt-4 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              {isAr ? "السعر اليومي" : "Per day"}
+            </p>
+            <p className="mt-1 text-xl font-bold text-slate-950">
+              {formatAED(product.pricePerDay)}
+            </p>
+          </div>
+          <span className="inline-flex flex-none items-center justify-center rounded-lg bg-primary-700 px-4 py-2 text-sm font-semibold text-white transition group-hover:bg-primary-800">
+            {isAr ? "احجز الآن" : "Book now"}
+          </span>
+        </div>
+      </div>
+    </Link>
   );
 }
 

@@ -10,9 +10,16 @@ import {
   LandingProblemSolution,
 } from "@/components/landing/LandingSections";
 import { buildLandingSchemas, type LandingPageData } from "@/lib/landing-pages";
+import type { LandingProduct } from "@/lib/landing-products";
 import { serializeJsonLd } from "@/lib/structured-data";
 
-export default function LandingPage({ data }: { data: LandingPageData }) {
+export default function LandingPage({
+  data,
+  products,
+}: {
+  data: LandingPageData;
+  products: LandingProduct[];
+}) {
   return (
     <>
       <script
@@ -28,7 +35,7 @@ export default function LandingPage({ data }: { data: LandingPageData }) {
           locale={data.locale}
           title={data.equipmentTitle}
           subtitle={data.equipmentSubtitle}
-          items={data.equipment}
+          products={products}
         />
         <LandingHowItWorks
           title={data.howItWorksTitle}
