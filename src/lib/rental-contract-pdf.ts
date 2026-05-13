@@ -38,7 +38,7 @@ function companyName() {
 }
 
 function companyTrn() {
-  return process.env.COMPANY_TRN?.trim() || "Not configured";
+  return process.env.NEXT_PUBLIC_COMPANY_VAT_NUMBER?.trim() || "Not configured";
 }
 
 function formatDate(value: Date) {
