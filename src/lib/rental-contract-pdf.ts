@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import puppeteer from "puppeteer";
+import chromium from "@sparticuz/chromium";
+import puppeteer from "puppeteer-core";
 import { formatAED } from "@/lib/currency";
 
 export type RentalContractPdfData = {
@@ -366,15 +367,23 @@ async function buildContractHtml(data: RentalContractPdfData) {
 export async function buildRentalContractPdf(
   data: RentalContractPdfData,
 ): Promise<Uint8Array> {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  const browser =
+    process.env.NODE_ENV === "production"
+      ? await puppeteer.launch({
+          args: chromium.args,
+          defaultViewport: { width: 1280, height: 720 },
+          executablePath: await chromium.executablePath(),
+          headless: true,
+        })
+      : await (await import("puppeteer")).default.launch({
+          headless: true,
+          args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        });
 
   try {
     const page = await browser.newPage();
     await page.setContent(await buildContractHtml(data), {
-      waitUntil: "networkidle0",
+      waitUntil: "load",
     });
     const pdf = await page.pdf({
       format: "A4",
