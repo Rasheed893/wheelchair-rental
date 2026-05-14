@@ -49,6 +49,7 @@ export default function BookingDetailPage({ params }: Props) {
   const router = useRouter();
   const [booking, setBooking] = useState<BookingWithRelations | null>(null);
   const [invoice, setInvoice] = useState<BookingInvoice | null>(null);
+  const [invoiceMessage, setInvoiceMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [supportPhone, setSupportPhone] = useState("");
@@ -56,15 +57,36 @@ export default function BookingDetailPage({ params }: Props) {
   useEffect(() => {
     Promise.all([
       fetch(`/api/bookings/${id}`).then((r) => r.json()),
-      fetch(`/api/bookings/${id}/invoice`).then((r) => r.json()),
       fetch("/api/config/support-phone").then((r) => r.json()),
     ])
-      .then(([bookingData, invoiceData, supportData]) => {
+      .then(async ([bookingData, supportData]) => {
         if (bookingData.success) {
-          setBooking(bookingData.data);
-        }
-        if (invoiceData.success) {
-          setInvoice(invoiceData.data);
+          const nextBooking = bookingData.data as BookingWithRelations;
+          setBooking(nextBooking);
+
+          if (
+            nextBooking.paymentMethod === "CASH" &&
+            nextBooking.paymentStatus !== "PAID"
+          ) {
+            setInvoice(null);
+            setInvoiceMessage("Invoice will be available after payment is collected.");
+          } else if (nextBooking.paymentStatus === "PAID") {
+            const invoiceResponse = await fetch(`/api/bookings/${id}/invoice`);
+            const invoiceData = await invoiceResponse.json();
+
+            if (invoiceData.success) {
+              setInvoice(invoiceData.data);
+              setInvoiceMessage("");
+            } else {
+              setInvoice(null);
+              setInvoiceMessage(
+                invoiceData.error ?? "Invoice is available after payment is confirmed.",
+              );
+            }
+          } else {
+            setInvoice(null);
+            setInvoiceMessage("Invoice is available after payment is confirmed.");
+          }
         }
         if (
           supportData.success &&
@@ -253,7 +275,10 @@ export default function BookingDetailPage({ params }: Props) {
                 <div className="flex flex-wrap justify-between gap-2">
                   <span className="text-slate-500">Payment Status</span>
                   <span className={PAY_STATUS[booking.paymentStatus]}>
-                    {booking.paymentStatus}
+                    {booking.paymentMethod === "CASH" &&
+                    booking.paymentStatus === "PENDING"
+                      ? "Pending cash collection"
+                      : booking.paymentStatus}
                   </span>
                 </div>
                 <div className="flex flex-wrap justify-between gap-2">
@@ -286,7 +311,7 @@ export default function BookingDetailPage({ params }: Props) {
 
           <div className="space-y-6">
             {invoice ? (
-              <div className="card p-5">
+              <div id="invoice" className="card p-5">
                 <h2 className="mb-4 font-semibold text-slate-900">Invoice</h2>
                 <div className="space-y-2 text-sm">
                   <div className="flex flex-wrap justify-between gap-2">
@@ -344,6 +369,11 @@ export default function BookingDetailPage({ params }: Props) {
                     </a>
                   ) : null}
                 </div>
+              </div>
+            ) : invoiceMessage ? (
+              <div id="invoice" className="card p-5">
+                <h2 className="mb-3 font-semibold text-slate-900">Invoice</h2>
+                <p className="text-sm text-slate-500">{invoiceMessage}</p>
               </div>
             ) : null}
 

@@ -1,34 +1,41 @@
 // src/app/api/auth/forgot-password/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { SignJWT } from "jose";
 import { prisma } from "@/lib/prisma";
 import { sendPasswordResetEmail } from "@/lib/emails/send-password-reset-email";
+import { buildRateLimitKey, rateLimit } from "@/lib/rate-limit";
+import { createPasswordResetToken } from "@/lib/password-reset";
+import { logger } from "@/lib/logger";
 import { z } from "zod";
 
 const schema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().email("Invalid email address").max(254),
 });
 
-function getJwtSecret() {
-  const secret = process.env.JWT_SECRET;
+function getAppBaseUrl() {
+  const configuredUrl = process.env.NEXTAUTH_URL?.trim();
+  if (configuredUrl) return configuredUrl.replace(/\/$/, "");
 
-  if (!secret) {
-    return new TextEncoder().encode("fallback-dev-secret-change-in-production");
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (vercelUrl) return `https://${vercelUrl.replace(/\/$/, "")}`;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("NEXTAUTH_URL or VERCEL_URL is required for password reset links");
   }
 
-  return new TextEncoder().encode(secret);
-}
-
-async function generateResetToken(userId: string) {
-  return new SignJWT({ sub: userId, type: "password-reset" })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("1h") // Token valid for 1 hour
-    .sign(getJwtSecret());
+  return "http://localhost:3000";
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const limited = rateLimit({
+      key: buildRateLimitKey(req, "auth:forgot-password"),
+      limit: 5,
+      windowMs: 60_000,
+    });
+    if (limited) {
+      return limited;
+    }
+
     const body = await req.json();
     const parsed = schema.safeParse(body);
 
@@ -42,6 +49,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const appBaseUrl = getAppBaseUrl();
     const user = await prisma.user.findUnique({
       where: { email: parsed.data.email.toLowerCase() },
     });
@@ -54,11 +62,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Generate reset token
-    const resetToken = await generateResetToken(user.id);
+    const resetToken = createPasswordResetToken();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetTokenHash: resetToken.tokenHash,
+        passwordResetExpiresAt: resetToken.expiresAt,
+      },
+    });
 
-    // Build reset URL
-    const resetUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/en/auth/reset-password?token=${resetToken}`;
+    const resetUrl = `${appBaseUrl}/en/auth/reset-password?token=${resetToken.token}`;
 
     // Send password reset email
     await sendPasswordResetEmail({
@@ -67,8 +80,7 @@ export async function POST(req: NextRequest) {
       resetLink: resetUrl,
       locale: "en", // Could be determined from user preference
     }).catch((err) => {
-      console.error("[RESET EMAIL ERROR]", err);
-      // Don't fail the request, just log the error
+      logger.error("[RESET EMAIL ERROR]", { userId: user.id, error: err });
     });
 
     return NextResponse.json({
@@ -76,7 +88,7 @@ export async function POST(req: NextRequest) {
       message: "If an account exists, a reset link has been sent",
     });
   } catch (error) {
-    console.error("[Forgot Password Error]", error);
+    logger.error("[Forgot Password Error]", { error });
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },

@@ -40,6 +40,8 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
   const statusLabel =
     STATUS_LABEL[booking.status]?.[isAr ? "ar" : "en"] ?? booking.status;
   const canCancel = ["PENDING", "CONFIRMED"].includes(booking.status);
+  const canViewInvoice =
+    booking.paymentStatus === "PAID" && Boolean(booking.invoice);
   const { totalAmount } = calculateBookingPricing(
     booking.totalDays,
     Number(booking.wheelchair.pricePerDay),
@@ -61,6 +63,11 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
             ? "🟡 بانتظار الدفع"
             : "🟡 Pending";
 
+  const displayedPaymentStatusLabel =
+    booking.paymentMethod === "CASH" && booking.paymentStatus === "PENDING"
+      ? "Pending cash collection"
+      : paymentStatusLabel;
+
   return (
     <div className="card p-5 animate-slide-up">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -68,7 +75,7 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
         <div className="flex-1 min-w-0">
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <span className={STATUS_BADGE[booking.status]}>{statusLabel}</span>
-            {booking.invoice && (
+            {canViewInvoice && (
               <span className="badge badge-blue">
                 {isAr ? "فاتورة" : "Invoice"}
               </span>
@@ -94,7 +101,7 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
             {isAr ? "رقم الحجز:" : "Booking #"}
             {booking.id.slice(-8).toUpperCase()}
           </p>
-          <p className="mt-1 break-words text-xs text-slate-500">{paymentStatusLabel}</p>
+          <p className="mt-1 break-words text-xs text-slate-500">{displayedPaymentStatusLabel}</p>
         </div>
 
         {/* Price */}
@@ -129,7 +136,7 @@ export default function BookingCard({ booking, locale, onCancel }: Props) {
             </Link>
           )}
 
-        {booking.invoice && (
+        {canViewInvoice && (
           <Link
             href={`/${locale}/dashboard/bookings/${booking.id}#invoice`}
             className="btn-outline w-full px-3 py-1.5 text-xs sm:w-auto"

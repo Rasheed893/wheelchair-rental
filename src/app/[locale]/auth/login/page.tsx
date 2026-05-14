@@ -19,7 +19,12 @@ export default function LoginPage({
   const isAr = locale === "ar";
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") ?? `/${locale}/dashboard`;
+  const requestedRedirect = searchParams.get("redirect");
+  const redirect =
+    requestedRedirect?.startsWith(`/${locale}/`) &&
+    !requestedRedirect.startsWith(`//`)
+      ? requestedRedirect
+      : `/${locale}/dashboard`;
 
   const [serverError, setServerError] = useState<string | null>(null);
 

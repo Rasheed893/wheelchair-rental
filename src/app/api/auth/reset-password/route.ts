@@ -1,31 +1,33 @@
 // src/app/api/auth/reset-password/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { jwtVerify } from "jose";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { buildRateLimitKey, rateLimit } from "@/lib/rate-limit";
+import { hashPasswordResetToken } from "@/lib/password-reset";
+import { logger } from "@/lib/logger";
 import { z } from "zod";
 
 const schema = z.object({
-  token: z.string(),
+  token: z.string().min(32, "Reset token is invalid").max(256),
   newPassword: z
     .string()
     .min(8, "Password must be at least 8 characters")
+    .max(128, "Password is too long")
     .regex(/[A-Z]/, "Must contain at least one uppercase letter")
     .regex(/[0-9]/, "Must contain at least one number"),
 });
 
-function getJwtSecret() {
-  const secret = process.env.JWT_SECRET;
-
-  if (!secret) {
-    return new TextEncoder().encode("fallback-dev-secret-change-in-production");
-  }
-
-  return new TextEncoder().encode(secret);
-}
-
 export async function POST(req: NextRequest) {
   try {
+    const limited = rateLimit({
+      key: buildRateLimitKey(req, "auth:reset-password"),
+      limit: 5,
+      windowMs: 60_000,
+    });
+    if (limited) {
+      return limited;
+    }
+
     const body = await req.json();
     const parsed = schema.safeParse(body);
 
@@ -39,35 +41,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify token
-    let payload;
-    try {
-      const result = await jwtVerify(parsed.data.token, getJwtSecret());
-      payload = result.payload as any;
-    } catch {
-      return NextResponse.json(
-        { success: false, error: "Reset link is invalid or expired" },
-        { status: 401 },
-      );
-    }
-
-    // Check token type
-    if (payload.type !== "password-reset") {
-      return NextResponse.json(
-        { success: false, error: "Invalid token" },
-        { status: 401 },
-      );
-    }
-
-    // Get user
-    const user = await prisma.user.findUnique({
-      where: { id: payload.sub },
+    const tokenHash = hashPasswordResetToken(parsed.data.token);
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: { gt: new Date() },
+      },
     });
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: "User not found" },
-        { status: 404 },
+        { success: false, error: "Reset link is invalid or expired" },
+        { status: 401 },
       );
     }
 
@@ -77,7 +62,11 @@ export async function POST(req: NextRequest) {
     // Update password
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: newPasswordHash },
+      data: {
+        passwordHash: newPasswordHash,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+      },
     });
 
     return NextResponse.json({
@@ -85,7 +74,7 @@ export async function POST(req: NextRequest) {
       message: "Password reset successfully",
     });
   } catch (error) {
-    console.error("[Reset Password Error]", error);
+    logger.error("[Reset Password Error]", { error });
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },

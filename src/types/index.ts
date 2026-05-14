@@ -110,6 +110,12 @@ export interface BookingCreateInput {
   termsVersion: string;
   idDocumentType: IdDocumentType;
   idDocumentUrl: string;
+  idDocumentPublicId?: string;
+  idDocumentResourceType?: "image" | "raw" | "video";
+  idDocumentDeliveryType?: "authenticated" | "private";
+  idDocumentFormat?: string | null;
+  idDocumentVersion?: string | null;
+  idDocumentOriginalFilename?: string | null;
 }
 
 export interface AvailabilityResponse {

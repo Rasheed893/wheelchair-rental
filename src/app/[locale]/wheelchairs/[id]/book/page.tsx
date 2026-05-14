@@ -49,6 +49,16 @@ interface WheelchairInfo {
 
 type IdDocumentType = "EMIRATES_ID" | "PASSPORT";
 
+type IdDocumentUpload = {
+  reference: string;
+  publicId: string;
+  resourceType: "image" | "raw" | "video";
+  deliveryType: "authenticated" | "private";
+  format?: string | null;
+  version?: string | null;
+  originalFilename?: string | null;
+};
+
 function PaymentForm({
   bookingId,
   locale,
@@ -154,6 +164,8 @@ export default function BookPage({
     useState<IdDocumentType>("EMIRATES_ID");
   const [idDocumentFile, setIdDocumentFile] = useState<File | null>(null);
   const [idDocumentReference, setIdDocumentReference] = useState("");
+  const [idDocumentUpload, setIdDocumentUpload] =
+    useState<IdDocumentUpload | null>(null);
   const [idDocumentReceived, setIdDocumentReceived] = useState(false);
   const [idDocumentUploading, setIdDocumentUploading] = useState(false);
 
@@ -283,8 +295,8 @@ export default function BookPage({
   }
 
   async function uploadIdDocument() {
-    if (idDocumentReference) {
-      return idDocumentReference;
+    if (idDocumentReference && idDocumentUpload) {
+      return idDocumentUpload;
     }
 
     if (!idDocumentFile) {
@@ -304,13 +316,21 @@ export default function BookPage({
       });
       const payload = await response.json();
 
-      if (!payload.success || !payload.data?.reference) {
+      if (
+        !payload.success ||
+        !payload.data?.reference ||
+        !payload.data?.publicId ||
+        !payload.data?.resourceType ||
+        !payload.data?.deliveryType
+      ) {
         throw new Error(payload.error ?? "Unable to upload ID copy.");
       }
 
-      setIdDocumentReference(payload.data.reference);
+      const upload = payload.data as IdDocumentUpload;
+      setIdDocumentReference(upload.reference);
+      setIdDocumentUpload(upload);
       setIdDocumentReceived(true);
-      return payload.data.reference as string;
+      return upload;
     } finally {
       setIdDocumentUploading(false);
     }
@@ -374,7 +394,7 @@ export default function BookPage({
         paymentMethod,
       });
 
-      const uploadedIdDocumentReference = await uploadIdDocument();
+      const uploadedIdDocument = await uploadIdDocument();
 
       const bookingResponse = await fetch("/api/bookings", {
         method: "POST",
@@ -394,7 +414,14 @@ export default function BookPage({
           termsAccepted: true,
           termsVersion: TERMS_VERSION,
           idDocumentType,
-          idDocumentUrl: uploadedIdDocumentReference,
+          idDocumentUrl: uploadedIdDocument.reference,
+          idDocumentPublicId: uploadedIdDocument.publicId,
+          idDocumentResourceType: uploadedIdDocument.resourceType,
+          idDocumentDeliveryType: uploadedIdDocument.deliveryType,
+          idDocumentFormat: uploadedIdDocument.format ?? undefined,
+          idDocumentVersion: uploadedIdDocument.version ?? undefined,
+          idDocumentOriginalFilename:
+            uploadedIdDocument.originalFilename ?? undefined,
         }),
       });
       const bookingData = await bookingResponse.json();
@@ -598,6 +625,7 @@ export default function BookPage({
                         onChange={(e) => {
                           setIdDocumentType(e.target.value as IdDocumentType);
                           setIdDocumentReference("");
+                          setIdDocumentUpload(null);
                           setIdDocumentReceived(false);
                         }}
                       >
@@ -611,6 +639,7 @@ export default function BookPage({
                         onChange={(e) => {
                           setIdDocumentFile(e.target.files?.[0] ?? null);
                           setIdDocumentReference("");
+                          setIdDocumentUpload(null);
                           setIdDocumentReceived(false);
                         }}
                       />
@@ -619,11 +648,11 @@ export default function BookPage({
                       Digital copy accepted. Admin-only access; customer view
                       will only show ID copy received.
                     </p>
-                    {idDocumentReceived && (
+                    {/* {idDocumentReceived && (
                       <p className="mt-2 text-xs font-medium text-emerald-700">
                         ID copy received
                       </p>
-                    )}
+                    )} */}
                   </div>
                   <div className="rounded-xl border border-slate-200 p-3">
                     <p className="mb-2 text-sm font-medium text-slate-700">

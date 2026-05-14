@@ -56,6 +56,10 @@ type AdminBookingDetail = {
   depositCollectedBy?: string | null;
   depositRefundedBy?: string | null;
   contractPdfUrl?: string | null;
+  invoice?: {
+    invoiceNumber?: string | null;
+    pdfUrl?: string | null;
+  } | null;
   user?: {
     name?: string | null;
     email?: string | null;
@@ -262,7 +266,7 @@ export default function AdminBookingDetailPage() {
                   {booking.idDocumentUploadedAt && (
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                       <a
-                        href={`/api/admin/bookings/${booking.id}/id-document?disposition=view`}
+                        href={`/api/admin/bookings/${booking.id}/id-document/view`}
                         target="_blank"
                         rel="noreferrer"
                         className="btn-outline w-full justify-center sm:w-auto"
@@ -270,13 +274,30 @@ export default function AdminBookingDetailPage() {
                         View ID copy
                       </a>
                       <a
-                        href={`/api/admin/bookings/${booking.id}/id-document?disposition=download`}
+                        href={`/api/admin/bookings/${booking.id}/id-document/download`}
                         className="btn-outline w-full justify-center sm:w-auto"
                       >
                         Download ID copy
                       </a>
                     </div>
                   )}
+
+                  <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row">
+                    {booking.invoice?.pdfUrl && (
+                      <a
+                        href={`/api/admin/bookings/${booking.id}/invoice/download`}
+                        className="btn-outline w-full justify-center sm:w-auto"
+                      >
+                        Download invoice
+                      </a>
+                    )}
+                    <a
+                      href={`/api/bookings/${booking.id}/rental-contract`}
+                      className="btn-outline w-full justify-center sm:w-auto"
+                    >
+                      Download rental contract
+                    </a>
+                  </div>
                 </section>
 
                 <section className="card p-5">

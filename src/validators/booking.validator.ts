@@ -8,6 +8,15 @@ const dateString = z
   .trim()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format");
 
+function todayInDubai() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Dubai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export const createBookingSchema = z
   .object({
     wheelchairId: z.string().trim().min(1, "Wheelchair ID is required"),
@@ -60,6 +69,26 @@ export const createBookingSchema = z
         (value) => value.startsWith("cloudinary:authenticated:"),
         "ID copy must be uploaded securely.",
       ),
+    idDocumentPublicId: z.string().trim().min(1).max(500).optional(),
+    idDocumentResourceType: z
+      .enum(["image", "raw", "video"])
+      .optional(),
+    idDocumentDeliveryType: z
+      .enum(["authenticated", "private"])
+      .optional(),
+    idDocumentFormat: z.string().trim().min(1).max(20).optional().nullable(),
+    idDocumentVersion: z.string().trim().min(1).max(50).optional().nullable(),
+    idDocumentOriginalFilename: z
+      .string()
+      .trim()
+      .min(1)
+      .max(255)
+      .optional()
+      .nullable(),
+  })
+  .refine((data) => data.startDate >= todayInDubai(), {
+    message: "Start date cannot be in the past",
+    path: ["startDate"],
   })
   .refine((data) => new Date(data.startDate) < new Date(data.endDate), {
     message: "End date must be after start date",

@@ -49,9 +49,15 @@ export const CreatePaymentIntentSchema = z.object({
   bookingId: requiredString("Booking ID"),
 });
 
+export const ConfirmPaymentIntentSchema = z.object({
+  paymentIntentId: requiredString("PaymentIntent ID"),
+  bookingId: requiredString("Booking ID").optional(),
+});
+
 export type BookingInput = z.infer<typeof BookingSchema>;
 export type CreatePaymentInput = z.infer<typeof CreatePaymentSchema>;
 export type CreatePaymentIntentInput = z.infer<typeof CreatePaymentIntentSchema>;
+export type ConfirmPaymentIntentInput = z.infer<typeof ConfirmPaymentIntentSchema>;
 
 export const createPaymentSafeParseExample = (input: unknown) =>
   CreatePaymentSchema.safeParse(input);

@@ -7,6 +7,7 @@ import {
 import { MissingEnvError } from "@/lib/env";
 import { buildRateLimitKey, rateLimit } from "@/lib/rate-limit";
 import { paymentService } from "@/services/payment.service";
+import { ConfirmPaymentIntentSchema } from "@/validators/payment.validator";
 
 export const POST = withCustomerAuth(async (req, { user }) => {
   try {
@@ -20,18 +21,18 @@ export const POST = withCustomerAuth(async (req, { user }) => {
     }
 
     const body = await req.json();
-    const paymentIntentId =
-      typeof body?.paymentIntentId === "string" ? body.paymentIntentId : "";
-    const bookingId = typeof body?.bookingId === "string" ? body.bookingId : "";
+    const parsed = ConfirmPaymentIntentSchema.safeParse(body);
 
-    if (!paymentIntentId) {
-      return badRequest("paymentIntentId is required");
+    if (!parsed.success) {
+      return badRequest(
+        parsed.error.issues[0]?.message ?? "paymentIntentId is required",
+      );
     }
 
     const result = await paymentService.confirmPaymentIntentForUser(
-      paymentIntentId,
+      parsed.data.paymentIntentId,
       user.id,
-      bookingId || undefined,
+      parsed.data.bookingId,
     );
 
     if (result.processed || result.ignored) {

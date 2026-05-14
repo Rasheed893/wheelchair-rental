@@ -549,6 +549,42 @@ export class PaymentService {
       return;
     }
 
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: {
+        paymentStatus: true,
+        payment: {
+          select: {
+            stripePaymentIntentId: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (
+      booking?.paymentStatus === "PAID" ||
+      booking?.payment?.status === "SUCCEEDED"
+    ) {
+      logger.warn("[PAYMENT SYNC] Ignoring failed event for paid booking", {
+        bookingId,
+        paymentIntentId: intent.id,
+      });
+      return;
+    }
+
+    if (
+      booking?.payment?.stripePaymentIntentId &&
+      booking.payment.stripePaymentIntentId !== intent.id
+    ) {
+      logger.warn("[PAYMENT SYNC] Ignoring stale failed payment intent", {
+        bookingId,
+        paymentIntentId: intent.id,
+        currentPaymentIntentId: booking.payment.stripePaymentIntentId,
+      });
+      return;
+    }
+
     logger.error("[PAYMENT ERROR]", {
       bookingId,
       error:
@@ -626,6 +662,10 @@ export class PaymentService {
 
     if (booking.paymentMethod !== "CASH") {
       throw new Error("Only CASH bookings can be marked as paid");
+    }
+
+    if (booking.status === "CANCELLED" || booking.status === "EXPIRED") {
+      throw new Error(`Cannot mark a ${booking.status.toLowerCase()} booking as paid`);
     }
 
     if (!isValidEmail(booking.user?.email)) {

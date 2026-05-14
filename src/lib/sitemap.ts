@@ -9,7 +9,6 @@ import {
   safeDate,
   type Locale,
 } from "@/lib/seo";
-import { backfillMissingWheelchairSlugs } from "@/lib/slug";
 
 type SitemapEntry = {
   path: string;
@@ -72,8 +71,6 @@ function toISODate(value: unknown): string | null {
 
 const getCachedWheelchairSitemapEntries = unstable_cache(
   async (): Promise<WheelchairSitemapEntry[]> => {
-    await backfillMissingWheelchairSlugs();
-
     const wheelchairs = await prisma.wheelchair.findMany({
       where: {
         status: { not: "RETIRED" },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { invoiceService } from "@/services/invoice.service";
 import { withCustomerAuth, notFound, serverError } from "@/lib/middleware";
+import { logger } from "@/lib/logger";
 
 export const GET = withCustomerAuth(async (_req, { params, user }) => {
   try {
@@ -20,13 +21,10 @@ export const GET = withCustomerAuth(async (_req, { params, user }) => {
     });
 
     if (!upstream.ok) {
-      console.error(
-        `Cloudinary fetch failed: ${upstream.status} ${upstream.statusText}`,
-        {
-          url: invoice.pdfUrl,
-          status: upstream.status,
-        },
-      );
+      logger.warn("[INVOICE DOWNLOAD] storage fetch failed", {
+        bookingId: params.id,
+        status: upstream.status,
+      });
       throw new Error(
         `Failed to fetch invoice PDF from storage: ${upstream.status} ${upstream.statusText}`,
       );

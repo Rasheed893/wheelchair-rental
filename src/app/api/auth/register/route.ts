@@ -3,11 +3,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookie } from "@/lib/auth";
 import { authService } from "@/services/auth.service";
 import { registerSchema } from "@/validators/auth.validator";
+import { buildRateLimitKey, rateLimit } from "@/lib/rate-limit";
 
 import { sendWelcomeEmail } from "@/lib/emails/send-welcome-email";
 
 export async function POST(req: NextRequest) {
   try {
+    const limited = rateLimit({
+      key: buildRateLimitKey(req, "auth:register"),
+      limit: 5,
+      windowMs: 60_000,
+    });
+    if (limited) {
+      return limited;
+    }
+
     const body = await req.json();
     const parsed = registerSchema.safeParse(body);
 

@@ -2,9 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookie } from "@/lib/auth";
 import { authService } from "@/services/auth.service";
 import { loginSchema } from "@/validators/auth.validator";
+import { buildRateLimitKey, rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    const limited = rateLimit({
+      key: buildRateLimitKey(req, "auth:login"),
+      limit: 10,
+      windowMs: 60_000,
+    });
+    if (limited) {
+      return limited;
+    }
+
     const body = await req.json();
     const parsed = loginSchema.safeParse(body);
 

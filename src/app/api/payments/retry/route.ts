@@ -7,9 +7,19 @@ import {
 import { MissingEnvError } from "@/lib/env";
 import { paymentService } from "@/services/payment.service";
 import { CreatePaymentIntentSchema } from "@/validators/payment.validator";
+import { buildRateLimitKey, rateLimit } from "@/lib/rate-limit";
 
 export const POST = withCustomerAuth(async (req, { user }) => {
   try {
+    const limited = rateLimit({
+      key: buildRateLimitKey(req, "payments:retry", user.id),
+      limit: 5,
+      windowMs: 60_000,
+    });
+    if (limited) {
+      return limited;
+    }
+
     const body = await req.json();
     const parsed = CreatePaymentIntentSchema.safeParse(body);
 

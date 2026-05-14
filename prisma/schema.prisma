@@ -111,6 +111,8 @@ model User {
   name          String
   phone         String?
   whatsappNumber String?
+  passwordResetTokenHash String?   @unique
+  passwordResetExpiresAt DateTime?
   role          Role      @default(CUSTOMER)
   emailVerified Boolean   @default(false)
   createdAt     DateTime  @default(now())
@@ -123,6 +125,7 @@ model User {
   @@index([email])
   @@index([role])
   @@index([whatsappNumber])
+  @@index([passwordResetExpiresAt])
   @@map("users")
 }
 
@@ -186,6 +189,12 @@ model Booking {
   whatsappNumber  String?
   idDocumentType  IdDocumentType?
   idDocumentUrl   String?
+  idDocumentPublicId String?
+  idDocumentResourceType String?
+  idDocumentDeliveryType String?
+  idDocumentFormat String?
+  idDocumentVersion String?
+  idDocumentOriginalFilename String?
   idDocumentUploadedAt DateTime?
   securityDeposit Decimal       @db.Decimal(10, 2) @default(500)
   depositStatus   DepositStatus @default(PENDING)
@@ -212,10 +221,13 @@ model Booking {
   invoice         Invoice?
   depositAuditLogs DepositAuditLog[]
 
-  // Composite index to speed up availability queries
+  // Composite indexes to speed up availability and expiry queries
   @@index([wheelchairId, startDate, endDate])
+  @@index([wheelchairId, status, startDate, endDate])
   @@index([userId])
   @@index([status])
+  @@index([paymentStatus])
+  @@index([reservationExpiresAt])
   @@index([whatsappNumber])
   @@index([depositStatus])
   @@index([startDate])

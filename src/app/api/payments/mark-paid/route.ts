@@ -8,10 +8,10 @@ export const POST = withAdminAuth(async (req) => {
     const body = await req.json();
     const bookingId =
       typeof body?.bookingId === "string" ? body.bookingId.trim() : "";
-    logger.info("[MARK PAID] bookingId", bookingId);
+    logger.info("[MARK PAID] booking received", { bookingId });
 
     if (!bookingId) {
-      console.warn("[MARK PAID] missing bookingId in request body");
+      logger.warn("[MARK PAID] missing bookingId in request body");
       return badRequest("bookingId is required");
     }
 
@@ -27,7 +27,6 @@ export const POST = withAdminAuth(async (req) => {
       result.updated ? "Booking marked as paid" : "Booking is already paid",
     );
   } catch (error) {
-    console.error("[MARK PAID] route error", error);
     if (error instanceof SyntaxError) {
       return badRequest("Invalid request body");
     }

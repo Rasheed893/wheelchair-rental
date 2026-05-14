@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import cloudinary, {
+  assertCloudinaryPublicId,
   buildInvoicePublicId,
   getInvoiceRawUrl,
+  logCloudinaryTarget,
   normalizeInvoicePublicId,
+  normalizePdfPublicId,
 } from "@/lib/cloudinary";
 import { buildInvoicePdf } from "@/lib/invoice-pdf";
 import {
@@ -65,6 +68,12 @@ export class InvoiceService {
         ).subtotal,
         booking.payment?.amount,
       ));
+    const customerName = this.getBookingCustomerName(booking.user.name);
+    const expectedPublicId = buildInvoicePublicId({
+      customerName,
+      userId: booking.user.id,
+      bookingId: booking.id,
+    });
 
     if (invoice.pdfUrl) {
       const normalizedPublicId = normalizeInvoicePublicId(invoice.pdfUrl);
@@ -72,24 +81,34 @@ export class InvoiceService {
         throw new Error("Stored invoice PDF reference is invalid");
       }
 
+      if (normalizedPublicId === expectedPublicId) {
+        if (normalizedPublicId !== invoice.pdfUrl) {
+          const migratedInvoice = await prisma.invoice.update({
+            where: { id: invoice.id },
+            data: { pdfUrl: normalizedPublicId },
+          });
+          await this.markInvoiceGeneratedMetadata(bookingId);
+          return migratedInvoice;
+        }
+
+        await this.markInvoiceGeneratedMetadata(bookingId);
+        return invoice;
+      }
+
       if (normalizedPublicId !== invoice.pdfUrl) {
         const migratedInvoice = await prisma.invoice.update({
           where: { id: invoice.id },
           data: { pdfUrl: normalizedPublicId },
         });
-        await this.markInvoiceGeneratedMetadata(bookingId);
-        return migratedInvoice;
+        invoice.pdfUrl = migratedInvoice.pdfUrl;
       }
-
-      await this.markInvoiceGeneratedMetadata(bookingId);
-      return invoice;
     }
 
     const pdfBytes = await buildInvoicePdf({
       invoiceNumber: invoice.invoiceNumber,
       issuedAt: invoice.issuedAt,
       bookingId: booking.id,
-      customerName: booking.user.name,
+      customerName,
       phoneNumber: booking.phoneNumber,
       deliveryCity: booking.deliveryCity,
       deliveryWindow: booking.deliveryWindow,
@@ -108,8 +127,7 @@ export class InvoiceService {
 
     const pdfBuffer = this.assertValidPdfBuffer(Buffer.from(pdfBytes));
     const publicId = await this.uploadPdf({
-      bookingId,
-      issuedAt: invoice.issuedAt,
+      publicId: expectedPublicId,
       pdfBuffer,
     });
 
@@ -291,12 +309,10 @@ export class InvoiceService {
   }
 
   private async uploadPdf({
-    bookingId,
-    issuedAt,
+    publicId,
     pdfBuffer,
   }: {
-    bookingId: string;
-    issuedAt: Date;
+    publicId: string;
     pdfBuffer: Buffer;
   }): Promise<string> {
     if (
@@ -307,15 +323,14 @@ export class InvoiceService {
       throw new Error("Cloudinary is not configured for invoice uploads");
     }
 
-    const year = new Intl.DateTimeFormat("en", {
-      year: "numeric",
-      timeZone: "Asia/Dubai",
-    }).format(issuedAt);
-
-    const publicId = buildInvoicePublicId(year, bookingId);
-
     const result = await new Promise<{ public_id: string }>(
       (resolve, reject) => {
+        logCloudinaryTarget({
+          publicId,
+          resourceType: "raw",
+          deliveryType: "upload",
+        });
+
         const stream = cloudinary.uploader.upload_stream(
           {
             resource_type: "raw",
@@ -341,7 +356,19 @@ export class InvoiceService {
               return;
             }
 
-            resolve({ public_id: uploadResult.public_id });
+            try {
+              assertCloudinaryPublicId({
+                expectedPublicId: publicId,
+                actualPublicId: uploadResult.public_id,
+                context: "Invoice upload",
+                allowPdfExtension: true,
+              });
+            } catch (publicIdError) {
+              reject(publicIdError);
+              return;
+            }
+
+            resolve({ public_id: normalizePdfPublicId(uploadResult.public_id) });
           },
         );
 
@@ -359,6 +386,10 @@ export class InvoiceService {
     }
 
     return getInvoiceRawUrl(publicId);
+  }
+
+  private getBookingCustomerName(userName?: string | null) {
+    return userName?.trim() || "customer";
   }
 
   private async markInvoiceGeneratedMetadata(bookingId: string) {

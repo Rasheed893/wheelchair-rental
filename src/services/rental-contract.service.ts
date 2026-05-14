@@ -1,4 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import cloudinary, {
+  assertCloudinaryPublicId,
+  buildBookingAssetPublicId,
+  logCloudinaryTarget,
+  normalizeInvoicePublicId,
+  normalizePdfPublicId,
+} from "@/lib/cloudinary";
+import { logger } from "@/lib/logger";
 import {
   buildRentalContractPdf,
   type RentalContractPdfData,
@@ -11,8 +19,12 @@ import {
 } from "@/lib/delivery";
 import type { AuthUser } from "@/types";
 
-function contractDownloadPath(bookingId: string) {
-  return `/api/bookings/${bookingId}/rental-contract`;
+function getBookingCustomerName(userName?: string | null) {
+  return userName?.trim() || "customer";
+}
+
+function normalizeStoredContractPublicId(value?: string | null) {
+  return normalizeInvoicePublicId(value) ?? value?.trim() ?? null;
 }
 
 class RentalContractService {
@@ -38,7 +50,7 @@ class RentalContractService {
 
     const data: RentalContractPdfData = {
       bookingId: booking.id,
-      customerName: booking.user?.name ?? "Customer",
+      customerName: getBookingCustomerName(booking.user?.name),
       contactNumber: booking.whatsappNumber ?? booking.phoneNumber,
       deliveryAddress: booking.deliveryAddress,
       idDocumentType: booking.idDocumentType,
@@ -57,11 +69,90 @@ class RentalContractService {
 
     const bytes = await buildRentalContractPdf(data);
 
-    if (!booking.contractPdfUrl) {
+    const expectedPublicId = buildBookingAssetPublicId({
+      customerName: getBookingCustomerName(booking.user?.name),
+      userId: booking.userId,
+      bookingId: booking.id,
+      assetName: "rental-contract",
+    });
+    const storedPublicId = normalizeStoredContractPublicId(booking.contractPdfUrl);
+
+    if (storedPublicId === expectedPublicId && booking.contractPdfUrl !== expectedPublicId) {
       await prisma.booking.update({
         where: { id: booking.id },
-        data: { contractPdfUrl: contractDownloadPath(booking.id) },
+        data: { contractPdfUrl: expectedPublicId },
       });
+    }
+
+    if (storedPublicId !== expectedPublicId) {
+      try {
+        const pdfBuffer = Buffer.from(bytes);
+
+        const uploadResult = await new Promise<{ public_id: string }>(
+          (resolve, reject) => {
+            logCloudinaryTarget({
+              publicId: expectedPublicId,
+              resourceType: "raw",
+              deliveryType: "upload",
+            });
+
+            const stream = cloudinary.uploader.upload_stream(
+              {
+                resource_type: "raw",
+                type: "upload",
+                access_mode: "public",
+                public_id: expectedPublicId,
+                format: "pdf",
+                use_filename: false,
+                unique_filename: false,
+                overwrite: true,
+                invalidate: true,
+              },
+              (error, result) => {
+                if (error) {
+                  reject(error);
+                  return;
+                }
+
+                if (!result?.public_id) {
+                  reject(
+                    new Error(
+                      "Cloudinary rental contract upload did not return a public ID",
+                    ),
+                  );
+                  return;
+                }
+
+                try {
+                  assertCloudinaryPublicId({
+                    expectedPublicId,
+                    actualPublicId: result.public_id,
+                    context: "Rental contract upload",
+                    allowPdfExtension: true,
+                  });
+                } catch (publicIdError) {
+                  reject(publicIdError);
+                  return;
+                }
+
+                resolve({ public_id: normalizePdfPublicId(result.public_id) });
+              },
+            );
+
+            stream.end(pdfBuffer);
+          },
+        );
+
+        await prisma.booking.update({
+          where: { id: booking.id },
+          data: { contractPdfUrl: uploadResult.public_id },
+        });
+      } catch (error) {
+        logger.error("[RENTAL CONTRACT ERROR] Cloudinary upload failed", {
+          bookingId: booking.id,
+          error,
+        });
+      }
     }
 
     return {

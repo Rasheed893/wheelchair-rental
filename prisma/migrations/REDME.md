@@ -14,7 +14,8 @@
 -- users: idx on email, role
 -- wheelchairs: idx on status, category, pricePerDay
 -- bookings: composite idx on (wheelchairId, startDate, endDate)
--- idx on userId, status, startDate, endDate
+-- idx on userId, status, paymentStatus, reservationExpiresAt, startDate, endDate
+-- composite idx on (wheelchairId, status, startDate, endDate)
 -- payments: idx on stripePaymentIntentId, status
 -- invoices: idx on userId, invoiceNumber, issuedAt
 
@@ -25,4 +26,4 @@
 -- AND "startDate" <= $endDate
 -- AND "endDate" >= $startDate
 -- LIMIT 1;
--- This query uses the composite index (wheelchairId, startDate, endDate)
+-- This query uses the composite index (wheelchairId, status, startDate, endDate)

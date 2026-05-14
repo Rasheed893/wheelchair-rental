@@ -1,4 +1,4 @@
-import type { BookingStatus, DepositDeductionType } from "@prisma/client";
+import { Prisma, type BookingStatus, type DepositDeductionType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import type {
@@ -8,7 +8,6 @@ import type {
   PaginationParams,
 } from "@/types";
 import type { CreateBookingInput } from "@/validators/booking.validator";
-import { wheelchairService } from "./wheelchair.service";
 import {
   sendBookingConfirmationEmail,
   sendAdminBookingNotificationEmail,
@@ -16,6 +15,7 @@ import {
   sendBookingStatusUpdateEmail,
 } from "@/lib/emails/send-booking-confirmation-email";
 import {
+  ACTIVE_BOOKING_STATUSES,
   CANCELLABLE_BOOKING_STATUSES,
   canTransitionBookingStatus,
 } from "@/lib/booking-status";
@@ -33,9 +33,17 @@ import {
 } from "@/lib/communication-risk";
 import { getSecurityDeposit } from "@/lib/security-deposit";
 import {
+  CloudinaryIdDocumentMoveError,
+  deleteUserTempIdDocumentUpload,
+  isUserTempIdDocumentPublicId,
+  moveTempIdDocumentToBookingFolder,
+  parseAuthenticatedCloudinaryReference,
+} from "@/lib/cloudinary";
+import {
   notifyBookingReceived,
   notifyDepositUpdated,
 } from "@/lib/booking-notifications";
+import { differenceInDays } from "date-fns";
 
 type DepositAction =
   | "deposit-collected"
@@ -51,6 +59,36 @@ type AdminDepositUpdateInput = {
   withheldAmount?: number;
 };
 
+type CreatedBooking = Prisma.BookingGetPayload<{
+  include: {
+    user: { select: { id: true; name: true; email: true } };
+    wheelchair: true;
+    payment: true;
+    invoice: true;
+  };
+}>;
+
+type BookingTransactionClient = Prisma.TransactionClient;
+
+export type BookingValidationErrorCode =
+  | "OUT_OF_STOCK"
+  | "INVALID_DATE"
+  | "INVALID_WHEELCHAIR"
+  | "WHEELCHAIR_UNAVAILABLE"
+  | "TERMS_NOT_ACCEPTED"
+  | "INVALID_ID_DOCUMENT";
+
+export class BookingValidationError extends Error {
+  constructor(
+    public readonly code: BookingValidationErrorCode,
+    message: string,
+    public readonly status: 400 | 409 = 400,
+  ) {
+    super(message);
+    this.name = "BookingValidationError";
+  }
+}
+
 const DEPOSIT_TRANSITIONS: Record<string, DepositAction[]> = {
   PENDING: ["deposit-collected"],
   COLLECTED: ["deposit-refunded", "deposit-partially-withheld", "deposit-withheld"],
@@ -58,7 +96,77 @@ const DEPOSIT_TRANSITIONS: Record<string, DepositAction[]> = {
   PARTIALLY_WITHHELD: [],
 };
 
+const MAX_CREATE_BOOKING_RETRIES = 3;
+
 export class BookingService {
+  async cleanupFailedBookingIdDocumentUpload({
+    idDocumentUrl,
+    userId,
+  }: {
+    idDocumentUrl: string;
+    userId: string;
+  }) {
+    try {
+      const result = await deleteUserTempIdDocumentUpload({
+        reference: idDocumentUrl,
+        userId,
+      });
+
+      if (result.deleted) {
+        logger.info("[ID UPLOAD CLEANUP] deleted orphan upload", {
+          userId,
+          resourceType: result.resourceType,
+          result: result.result,
+        });
+      }
+    } catch (error) {
+      logger.error("[ID UPLOAD CLEANUP ERROR]", {
+        userId,
+        error,
+      });
+    }
+  }
+
+  private async getWheelchairForBooking(
+    wheelchairId: string,
+    tx?: BookingTransactionClient,
+  ) {
+    const client = tx ?? prisma;
+
+    return client.wheelchair.findUnique({
+      where: { id: wheelchairId },
+      select: {
+        id: true,
+        category: true,
+        pricePerDay: true,
+        stockQuantity: true,
+        status: true,
+      },
+    });
+  }
+
+  private async getBookedQuantityForRange({
+    wheelchairId,
+    startDate,
+    endDate,
+    tx,
+  }: {
+    wheelchairId: string;
+    startDate: Date;
+    endDate: Date;
+    tx?: BookingTransactionClient;
+  }) {
+    const client = tx ?? prisma;
+
+    return client.booking.count({
+      where: {
+        wheelchairId,
+        status: { in: ACTIVE_BOOKING_STATUSES },
+        AND: [{ startDate: { lte: endDate } }, { endDate: { gte: startDate } }],
+      },
+    });
+  }
+
   private withCommunicationMetadata<T extends Record<string, unknown>>(booking: T) {
     return {
       ...booking,
@@ -71,11 +179,25 @@ export class BookingService {
     };
   }
 
-  private redactCustomerBooking<T extends Record<string, unknown>>(booking: T) {
+  private redactIdDocumentLocator<T extends Record<string, unknown>>(booking: T) {
     return {
-      ...this.withCommunicationMetadata(booking),
+      ...booking,
       idDocumentUrl: null,
+      idDocumentPublicId: null,
+      idDocumentResourceType: null,
+      idDocumentDeliveryType: null,
+      idDocumentFormat: null,
+      idDocumentVersion: null,
+      idDocumentOriginalFilename: null,
     };
+  }
+
+  private redactCustomerBooking<T extends Record<string, unknown>>(booking: T) {
+    return this.redactIdDocumentLocator(this.withCommunicationMetadata(booking));
+  }
+
+  private redactAdminBooking<T extends Record<string, unknown>>(booking: T) {
+    return this.redactIdDocumentLocator(this.withCommunicationMetadata(booking));
   }
 
   async expirePendingBookings(): Promise<number> {
@@ -133,107 +255,337 @@ export class BookingService {
     const wheelchairId = input.wheelchairId.trim();
     const startDate = new Date(input.startDate);
     const endDate = new Date(input.endDate);
+    const cleanupUploadedIdDocument = async () => {
+      await this.cleanupFailedBookingIdDocumentUpload({
+        idDocumentUrl: input.idDocumentUrl,
+        userId: user.id,
+      });
+    };
 
     if (!wheelchairId) {
-      throw new Error("Wheelchair ID is required");
+      await cleanupUploadedIdDocument();
+      throw new BookingValidationError(
+        "INVALID_WHEELCHAIR",
+        "Wheelchair ID is required",
+      );
     }
 
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      throw new Error("Invalid booking dates");
+      await cleanupUploadedIdDocument();
+      throw new BookingValidationError(
+        "INVALID_DATE",
+        "Invalid booking dates",
+        409,
+      );
     }
 
     if (startDate >= endDate) {
-      throw new Error("End date must be after start date");
+      await cleanupUploadedIdDocument();
+      throw new BookingValidationError(
+        "INVALID_DATE",
+        "End date must be after start date",
+        409,
+      );
     }
 
     if (!input.termsAccepted) {
-      throw new Error("You must accept the Terms & Conditions.");
+      await cleanupUploadedIdDocument();
+      throw new BookingValidationError(
+        "TERMS_NOT_ACCEPTED",
+        "You must accept the Terms & Conditions.",
+      );
+    }
+
+    const parsedIdDocument = parseAuthenticatedCloudinaryReference(
+      input.idDocumentUrl,
+    );
+    const idDocumentPublicId =
+      input.idDocumentPublicId?.trim() || parsedIdDocument?.publicId;
+    const idDocumentResourceType =
+      input.idDocumentResourceType || parsedIdDocument?.resourceType;
+    const idDocumentDeliveryType =
+      input.idDocumentDeliveryType || parsedIdDocument?.deliveryType;
+
+    if (
+      !parsedIdDocument ||
+      !idDocumentPublicId ||
+      !idDocumentResourceType ||
+      !idDocumentDeliveryType ||
+      idDocumentPublicId !== parsedIdDocument.publicId ||
+      idDocumentResourceType !== parsedIdDocument.resourceType ||
+      idDocumentDeliveryType !== parsedIdDocument.deliveryType ||
+      !isUserTempIdDocumentPublicId(idDocumentPublicId, user.id)
+    ) {
+      await cleanupUploadedIdDocument();
+      throw new BookingValidationError(
+        "INVALID_ID_DOCUMENT",
+        "ID copy must be uploaded securely by this account.",
+      );
     }
 
     const communicationRisk = getCommunicationRisk(input.whatsappNumber);
-
-    const wheelchair = await wheelchairService.getById(wheelchairId);
-
-    if (!wheelchair) {
-      throw new Error("Invalid wheelchair ID");
-    }
-
-    const availability = await wheelchairService.getAvailabilitySummary(
-      wheelchairId,
-      startDate,
-      endDate,
-    );
-
-    if (availability.availableStock < 1) {
-      const supportPhone = getOptionalEnv(
-        "NEXT_PUBLIC_SUPPORT_PHONE",
-        "support",
-      );
-      throw new Error(
-        "Selected wheelchair is out of stock for those dates Please contact support for assistance at " +
-          supportPhone,
-      );
-    }
-
-    const { days, pricePerDay } = await wheelchairService.calculatePrice(
-      wheelchairId,
-      startDate,
-      endDate,
-    );
     const deliveryFee = getDeliveryFee(input.deliveryCity);
-    const pricing = calculateBookingPricing(days, pricePerDay, deliveryFee);
-    const securityDeposit = getSecurityDeposit(wheelchair.category);
+    const supportPhone = getOptionalEnv("NEXT_PUBLIC_SUPPORT_PHONE", "support");
 
-    const booking = await prisma.booking.create({
-      data: {
-        userId: user.id,
-        wheelchairId,
-        startDate,
-        endDate,
-        totalDays: days,
-        totalPrice: pricing.total,
-        status: input.paymentMethod === "CASH" ? "CONFIRMED" : "PENDING",
-        phoneNumber: input.phoneNumber,
-        whatsappNumber: input.whatsappNumber,
-        deliveryCity: input.deliveryCity,
-        deliveryWindow: input.deliveryWindow,
-        deliveryAddress: input.deliveryAddress,
-        deliveryNotes: input.deliveryNotes,
-        deliveryFee,
-        securityDeposit,
-        depositStatus: "PENDING",
-        paymentMethod: input.paymentMethod,
-        paymentStatus: "PENDING",
-        termsAcceptedAt: new Date(),
-        termsVersion: input.termsVersion,
-        idDocumentType: input.idDocumentType,
-        idDocumentUrl: input.idDocumentUrl,
-        idDocumentUploadedAt: new Date(),
-        reservationExpiresAt:
-          input.paymentMethod === "ONLINE" ? getReservationExpiryDate() : null,
-        paidAt: null,
-      },
-      include: {
-        user: { select: { id: true, name: true, email: true } },
-        wheelchair: true,
-        payment: true,
-        invoice: true,
-      },
-    });
+    let booking: CreatedBooking | null = null;
 
-    if (input.fullName !== booking.user.name) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { name: input.fullName },
-      });
-      booking.user.name = input.fullName;
+    for (let attempt = 1; attempt <= MAX_CREATE_BOOKING_RETRIES; attempt++) {
+      const started = Date.now();
+
+      try {
+        logger.info("[BOOKING] transaction started", {
+          userId: user.id,
+          wheelchairId,
+          attempt,
+        });
+
+        booking = await prisma.$transaction(
+          async (tx) => {
+            const wheelchair = await this.getWheelchairForBooking(
+              wheelchairId,
+              tx,
+            );
+
+            if (!wheelchair) {
+              throw new BookingValidationError(
+                "INVALID_WHEELCHAIR",
+                "Invalid wheelchair ID",
+              );
+            }
+
+            if (wheelchair.status !== "AVAILABLE") {
+              throw new BookingValidationError(
+                "WHEELCHAIR_UNAVAILABLE",
+                "Selected wheelchair is not available for rental",
+                409,
+              );
+            }
+
+            const bookedQuantity = await this.getBookedQuantityForRange({
+              wheelchairId,
+              startDate,
+              endDate,
+              tx,
+            });
+
+            if (bookedQuantity >= wheelchair.stockQuantity) {
+              throw new BookingValidationError(
+                "OUT_OF_STOCK",
+                "Selected wheelchair is out of stock for those dates. Please contact support for assistance at " +
+                  supportPhone,
+                409,
+              );
+            }
+
+            const totalDays = Math.max(1, differenceInDays(endDate, startDate));
+            const pricePerDay = Number(wheelchair.pricePerDay);
+            const pricing = calculateBookingPricing(
+              totalDays,
+              pricePerDay,
+              deliveryFee,
+            );
+            const securityDeposit = getSecurityDeposit(wheelchair.category);
+
+            return tx.booking.create({
+              data: {
+                userId: user.id,
+                wheelchairId,
+                startDate,
+                endDate,
+                totalDays,
+                totalPrice: pricing.total,
+                status: input.paymentMethod === "CASH" ? "CONFIRMED" : "PENDING",
+                phoneNumber: input.phoneNumber,
+                whatsappNumber: input.whatsappNumber,
+                deliveryCity: input.deliveryCity,
+                deliveryWindow: input.deliveryWindow,
+                deliveryAddress: input.deliveryAddress,
+                deliveryNotes: input.deliveryNotes,
+                deliveryFee,
+                securityDeposit,
+                depositStatus: "PENDING",
+                paymentMethod: input.paymentMethod,
+                paymentStatus: "PENDING",
+                termsAcceptedAt: new Date(),
+                termsVersion: input.termsVersion,
+                idDocumentType: input.idDocumentType,
+                idDocumentUrl: input.idDocumentUrl,
+                idDocumentPublicId,
+                idDocumentResourceType,
+                idDocumentDeliveryType,
+                idDocumentFormat: input.idDocumentFormat ?? null,
+                idDocumentVersion: input.idDocumentVersion ?? null,
+                idDocumentOriginalFilename:
+                  input.idDocumentOriginalFilename ?? null,
+                idDocumentUploadedAt: new Date(),
+                reservationExpiresAt:
+                  input.paymentMethod === "ONLINE"
+                    ? getReservationExpiryDate()
+                    : null,
+                paidAt: null,
+              },
+              include: {
+                user: { select: { id: true, name: true, email: true } },
+                wheelchair: true,
+                payment: true,
+                invoice: true,
+              },
+            });
+          },
+          {
+            maxWait: 15_000,
+            timeout: 15_000,
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          },
+        );
+        console.log("[BOOKING] tx duration", Date.now() - started);
+        logger.info("[BOOKING] transaction committed", {
+          bookingId: booking.id,
+          userId: user.id,
+          wheelchairId,
+          attempt,
+        });
+        break;
+      } catch (error) {
+        console.log("[BOOKING] tx duration", Date.now() - started);
+        if (!(error instanceof BookingValidationError)) {
+          logger.error("[BOOKING ERROR] transaction failed", {
+            userId: user.id,
+            wheelchairId,
+            attempt,
+            willRetry:
+              attempt < MAX_CREATE_BOOKING_RETRIES &&
+              error instanceof Prisma.PrismaClientKnownRequestError &&
+              error.code === "P2034",
+            error,
+          });
+        }
+
+        if (
+          attempt < MAX_CREATE_BOOKING_RETRIES &&
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2034"
+        ) {
+          continue;
+        }
+
+        await this.cleanupFailedBookingIdDocumentUpload({
+          idDocumentUrl: input.idDocumentUrl,
+          userId: user.id,
+        });
+        throw error;
+      }
     }
+
+    if (!booking) {
+      await this.cleanupFailedBookingIdDocumentUpload({
+        idDocumentUrl: input.idDocumentUrl,
+        userId: user.id,
+      });
+      throw new Error("Booking could not be created. Please try again.");
+    }
+
+    if (input.fullName !== user.name) {
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { name: input.fullName },
+        });
+        booking.user.name = input.fullName;
+      } catch (error) {
+        logger.error("[BOOKING ERROR] user profile update failed", {
+          bookingId: booking.id,
+          userId: user.id,
+          error,
+        });
+      }
+    }
+
+    if (booking.idDocumentUrl) {
+      const customerNameForFolder =
+        booking.user.name?.trim() || input.fullName.trim() || "customer";
+
+      logger.info("[ID DOCUMENT] moving temp upload to customer folder", {
+        bookingId: booking.id,
+        userId: booking.userId,
+      });
+      logger.info("[ID DOCUMENT] verify source", {
+        bookingId: booking.id,
+        publicId: booking.idDocumentPublicId,
+        resourceType: booking.idDocumentResourceType,
+        deliveryType: booking.idDocumentDeliveryType,
+        format: booking.idDocumentFormat,
+      });
+
+      try {
+        const movedDocument = await moveTempIdDocumentToBookingFolder({
+          reference: booking.idDocumentUrl,
+          userId: booking.userId,
+          customerName: customerNameForFolder,
+          bookingId: booking.id,
+          format: booking.idDocumentFormat,
+        });
+
+        const updatedDocumentBooking = await prisma.booking.update({
+          where: { id: booking.id },
+          data: {
+            idDocumentUrl: movedDocument.reference,
+            idDocumentPublicId: movedDocument.publicId,
+            idDocumentResourceType: movedDocument.resourceType,
+            idDocumentDeliveryType: movedDocument.deliveryType,
+            idDocumentFormat: movedDocument.format,
+            idDocumentVersion: movedDocument.version,
+            idDocumentOriginalFilename:
+              movedDocument.originalFilename ??
+              input.idDocumentOriginalFilename ??
+              null,
+          },
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+            wheelchair: true,
+            payment: true,
+            invoice: true,
+          },
+        });
+
+        booking = updatedDocumentBooking;
+        logger.info("[ID DOCUMENT] moved successfully", {
+          bookingId: booking.id,
+          userId: booking.userId,
+          resourceType: movedDocument.resourceType,
+          deliveryType: movedDocument.deliveryType,
+        });
+      } catch (error) {
+        const moveDetails =
+          error instanceof CloudinaryIdDocumentMoveError
+            ? error.details
+            : {};
+
+        logger.error("[ID DOCUMENT ERROR] move failed", {
+          bookingId: booking.id,
+          userId: booking.userId,
+          originalPublicId: moveDetails.originalPublicId,
+          targetPublicId: moveDetails.targetPublicId,
+          resourceType: moveDetails.resourceType,
+          deliveryType: moveDetails.deliveryType,
+          cloudinaryMessage: moveDetails.cloudinaryMessage,
+          cloudinaryHttpCode: moveDetails.cloudinaryHttpCode,
+          step: moveDetails.step,
+          error,
+        });
+      }
+    }
+
+    const pricing = calculateBookingPricing(
+      booking.totalDays,
+      Number(booking.wheelchair.pricePerDay),
+      Number(booking.deliveryFee),
+    );
 
     logger.info("[BOOKING] Created booking", {
       bookingId: booking.id,
       paymentMethod: booking.paymentMethod,
       paymentStatus: booking.paymentStatus,
-      customerEmail: booking.user.email,
       communicationRisk,
       communicationPriority: getCommunicationPriority(booking.whatsappNumber),
     });
@@ -355,7 +707,7 @@ export class BookingService {
       ) as unknown as BookingWithRelations;
     }
 
-    return this.withCommunicationMetadata(
+    return this.redactAdminBooking(
       booking as unknown as Record<string, unknown>,
     ) as unknown as BookingWithRelations;
   }
@@ -378,7 +730,7 @@ export class BookingService {
       return null;
     }
 
-    return this.withCommunicationMetadata(
+    return this.redactAdminBooking(
       booking as unknown as Record<string, unknown>,
     ) as unknown as BookingWithRelations;
   }
@@ -439,7 +791,7 @@ export class BookingService {
       ) as unknown as BookingWithRelations;
     }
 
-    return this.withCommunicationMetadata(
+    return this.redactAdminBooking(
       updated as unknown as Record<string, unknown>,
     ) as unknown as BookingWithRelations;
   }
@@ -496,7 +848,7 @@ export class BookingService {
 
     return {
       data: data.map((booking) =>
-        this.withCommunicationMetadata(
+        this.redactAdminBooking(
           booking as unknown as Record<string, unknown>,
         ),
       ) as unknown as BookingWithRelations[],
@@ -569,7 +921,7 @@ export class BookingService {
       }
     }
 
-    return this.withCommunicationMetadata(
+    return this.redactAdminBooking(
       updated as unknown as Record<string, unknown>,
     ) as unknown as BookingWithRelations;
   }
@@ -726,7 +1078,7 @@ export class BookingService {
         : null,
     });
 
-    return this.withCommunicationMetadata(
+    return this.redactAdminBooking(
       updated as unknown as Record<string, unknown>,
     ) as unknown as BookingWithRelations;
   }
