@@ -14,6 +14,12 @@ const withNextIntl = createNextIntlPlugin("./src/lib/i18n.ts");
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+  outputFileTracingIncludes: {
+    "/*": [
+      "./node_modules/@sparticuz/chromium/bin/**/*",
+      "./node_modules/@sparticuz/chromium/build/**/*",
+    ],
+  },
 
   images: {
     // Task 7: serve modern formats automatically (AVIF ~50% smaller than JPEG)

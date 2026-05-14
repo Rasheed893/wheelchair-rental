@@ -375,15 +375,20 @@ export async function buildRentalContractPdf(
   const chromiumRuntime = chromium as ChromiumRuntime;
   const browser =
     process.env.NODE_ENV === "production"
-      ? await puppeteer.launch({
-          args: chromium.args,
-          defaultViewport: chromiumRuntime.defaultViewport ?? {
-            width: 1280,
-            height: 720,
-          },
-          executablePath: await chromium.executablePath(),
-          headless: chromiumRuntime.headless ?? true,
-        })
+      ? await (async () => {
+          const executablePath = await chromium.executablePath();
+          console.log("[CHROMIUM] executablePath", executablePath);
+
+          return puppeteer.launch({
+            args: chromium.args,
+            defaultViewport: chromiumRuntime.defaultViewport ?? {
+              width: 1280,
+              height: 720,
+            },
+            executablePath,
+            headless: chromiumRuntime.headless ?? true,
+          });
+        })()
       : await (await import("puppeteer")).default.launch({
           headless: true,
           args: ["--no-sandbox", "--disable-setuid-sandbox"],
