@@ -8,6 +8,9 @@ import {
   withCustomerAuth,
 } from "@/lib/middleware";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export const GET = withCustomerAuth(async (_req, { params, user }) => {
   try {
     const contract = await rentalContractService.generate(params.id, user);

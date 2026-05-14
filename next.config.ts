@@ -13,6 +13,8 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin("./src/lib/i18n.ts");
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+
   images: {
     // Task 7: serve modern formats automatically (AVIF ~50% smaller than JPEG)
     formats: ["image/avif", "image/webp"],

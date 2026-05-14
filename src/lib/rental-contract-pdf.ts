@@ -4,6 +4,11 @@ import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
 import { formatAED } from "@/lib/currency";
 
+type ChromiumRuntime = typeof chromium & {
+  defaultViewport?: { width: number; height: number };
+  headless?: boolean;
+};
+
 export type RentalContractPdfData = {
   bookingId: string;
   customerName: string;
@@ -367,13 +372,17 @@ async function buildContractHtml(data: RentalContractPdfData) {
 export async function buildRentalContractPdf(
   data: RentalContractPdfData,
 ): Promise<Uint8Array> {
+  const chromiumRuntime = chromium as ChromiumRuntime;
   const browser =
     process.env.NODE_ENV === "production"
       ? await puppeteer.launch({
           args: chromium.args,
-          defaultViewport: { width: 1280, height: 720 },
+          defaultViewport: chromiumRuntime.defaultViewport ?? {
+            width: 1280,
+            height: 720,
+          },
           executablePath: await chromium.executablePath(),
-          headless: true,
+          headless: chromiumRuntime.headless ?? true,
         })
       : await (await import("puppeteer")).default.launch({
           headless: true,
