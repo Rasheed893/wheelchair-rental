@@ -1,6 +1,5 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { backfillMissingWheelchairSlugs } from "@/lib/slug";
 
 export const publicWheelchairSelect = {
   id: true,
@@ -24,8 +23,6 @@ export const publicWheelchairSelect = {
 
 export const getPublicWheelchairByIdentifier = unstable_cache(
   async (identifier: string) => {
-    await backfillMissingWheelchairSlugs();
-
     return prisma.wheelchair.findFirst({
       where: {
         OR: [{ id: identifier }, { slug: identifier }],

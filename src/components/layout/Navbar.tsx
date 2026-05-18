@@ -68,6 +68,7 @@ export default function Navbar({ locale }: NavbarProps) {
                 height={55}
                 className="h-auto w-[150px] object-contain sm:w-[160px] md:w-[190px] lg:w-[210px]"
                 priority
+                fetchPriority="high"
               />
             </Link>
           </div>

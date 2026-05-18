@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import WheelchairCard from "@/components/wheelchair/WheelchairCard";
 import type { WheelchairCategory } from "@prisma/client";
 import { buildListingMetadata, type Locale } from "@/lib/seo";
-import { backfillMissingWheelchairSlugs } from "@/lib/slug";
 
 interface Props {
   params: Promise<{ locale: string }>;
@@ -40,7 +39,6 @@ const CATEGORIES: {
 ];
 
 async function getWheelchairs(category?: string, search?: string, page = 1) {
-  await backfillMissingWheelchairSlugs();
   const pageSize = 12;
   const skip = (page - 1) * pageSize;
 

@@ -1,7 +1,6 @@
 import { unstable_cache } from "next/cache";
 import type { WheelchairCategory, WheelchairStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { backfillMissingWheelchairSlugs } from "@/lib/slug";
 import type { LandingPageKey } from "@/lib/landing-pages";
 
 export interface LandingProduct {
@@ -94,8 +93,6 @@ function selectLandingProducts(
 
 const getCachedLandingProducts = unstable_cache(
   async (key: LandingPageKey, limit = 6): Promise<LandingProduct[]> => {
-    await backfillMissingWheelchairSlugs();
-
     const products = await prisma.wheelchair.findMany({
       where: {
         status: { not: "RETIRED" },

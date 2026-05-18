@@ -5,7 +5,6 @@ import { unstable_cache } from "next/cache";
 import WheelchairCard from "@/components/wheelchair/WheelchairCard";
 import { buildHomeMetadata, type Locale } from "@/lib/seo";
 import { setRequestLocale } from "next-intl/server";
-import { backfillMissingWheelchairSlugs } from "@/lib/slug";
 import {
   buildLocalBusinessSchema,
   buildWebsiteSchema,
@@ -30,25 +29,50 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 const getFeaturedWheelchairs = unstable_cache(
   async () => {
     try {
-      // await backfillMissingWheelchairSlugs();
-      return await prisma.wheelchair.findMany({
+      const wheelchairs = await prisma.wheelchair.findMany({
         where: { status: "AVAILABLE" },
         take: 6,
         orderBy: { createdAt: "desc" },
       });
+
+      console.info("[HOME] featured wheelchair count", {
+        count: wheelchairs.length,
+      });
+
+      if (wheelchairs.length === 0) {
+        const [total, statusCounts, missingSlugCount] = await Promise.all([
+          prisma.wheelchair.count(),
+          prisma.wheelchair.groupBy({
+            by: ["status"],
+            _count: { _all: true },
+          }),
+          prisma.wheelchair.count({ where: { slug: null } }),
+        ]);
+
+        console.warn("[HOME] skipped reason if zero", {
+          reason: total === 0 ? "no_wheelchairs" : "no_available_wheelchairs",
+          total,
+          statusCounts,
+          missingSlugCount,
+        });
+      }
+
+      return wheelchairs;
     } catch (error) {
       console.error("[HOME] Failed to load featured wheelchairs", error);
+      console.warn("[HOME] skipped reason if zero", {
+        reason: "query_failed",
+      });
       return [];
     }
   },
-  ["home-featured-wheelchairs"],
+  ["home-featured-wheelchairs-v2"],
   { revalidate: 3600, tags: ["wheelchairs"] },
 );
 export default async function HomePage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
   const isAr = locale === "ar";
-  await backfillMissingWheelchairSlugs();
   const wheelchairs = await getFeaturedWheelchairs();
   const schemas = [
     buildWebsiteSchema(locale as Locale),

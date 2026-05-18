@@ -51,6 +51,10 @@ export function DateRangePicker({
           opacity: 0.3;
           text-decoration: line-through;
         }
+        /* Flip navigation arrows for RTL (Arabic) */
+        .rdp-wrapper [dir="rtl"] .rdp-nav_button {
+          transform: scaleX(-1);
+        }
       `}</style>
 
       <DayPicker

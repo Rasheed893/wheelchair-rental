@@ -36,29 +36,29 @@ function LandingCtaButtons({
   return (
     <div
       className={clsx(
-        "flex w-full flex-col gap-3 sm:w-auto sm:flex-row",
+        "flex w-full max-w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center",
         align === "center" && "justify-center",
       )}
     >
       <Link
         href={`/${locale}/wheelchairs`}
-        className="inline-flex w-full items-center justify-center rounded-lg bg-primary-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 sm:w-auto"
+        className="inline-flex w-full min-w-0 items-center justify-center rounded-lg bg-primary-700 px-6 py-3 text-center text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 sm:w-auto sm:min-w-[140px]"
       >
         {primaryLabel}
       </Link>
       {contactLinks ? (
-        <div className="grid w-full grid-cols-2 gap-3 sm:w-auto">
+        <div className="flex w-full max-w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap">
           <Link
             href={contactLinks.whatsappHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-w-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary-300 hover:bg-primary-50 sm:min-w-32"
+            className="inline-flex w-full min-w-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary-300 hover:bg-primary-50 sm:w-auto sm:min-w-[140px]"
           >
             {whatsappLabel}
           </Link>
           <Link
             href={contactLinks.callHref}
-            className="inline-flex min-w-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary-300 hover:bg-primary-50 sm:min-w-32"
+            className="inline-flex w-full min-w-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary-300 hover:bg-primary-50 sm:w-auto sm:min-w-[140px]"
           >
             {callLabel}
           </Link>

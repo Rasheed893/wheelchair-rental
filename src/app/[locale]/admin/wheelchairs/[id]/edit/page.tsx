@@ -18,6 +18,7 @@ export default function EditWheelchairPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [defaultValues, setDefaultValues] =
     useState<Partial<WheelchairFormData>>();
+  const [currentUpdatedAt, setCurrentUpdatedAt] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/wheelchairs/${id}`)
@@ -30,6 +31,7 @@ export default function EditWheelchairPage() {
         }
 
         const wheelchair = result.data;
+        setCurrentUpdatedAt(wheelchair.updatedAt);
         setDefaultValues({
           name: wheelchair.name,
           nameAr: wheelchair.nameAr,
@@ -56,6 +58,7 @@ export default function EditWheelchairPage() {
 
     const payload = {
       ...data,
+      updatedAt: currentUpdatedAt,
       images: data.images
         .split(",")
         .map((value) => value.trim())
@@ -86,6 +89,7 @@ export default function EditWheelchairPage() {
       return;
     }
 
+    setCurrentUpdatedAt(result.data.updatedAt);
     setSuccessMessage("Product updated successfully.");
     router.push(`/${locale}/admin/wheelchairs`);
   }

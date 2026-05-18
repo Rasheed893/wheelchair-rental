@@ -18,7 +18,7 @@ import { getPublicWheelchairByIdentifier } from "@/lib/wheelchair-public";
 
 // export const revalidate = 3600;
 export const dynamic = "force-static";
-export const dynamicParams = false;
+export const dynamicParams = true;
 
 interface Props {
   params: Promise<{ locale: string; id: string }>;
@@ -45,18 +45,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale, id } = await params;
   const wheelchair = await getPublicWheelchairByIdentifier(id);
 
-  if (!wheelchair || wheelchair.status === "RETIRED" || !wheelchair.slug) {
+  if (!wheelchair || wheelchair.status === "RETIRED") {
     return { title: "Not Found" };
   }
 
-  if (id === wheelchair.id) {
+  if (wheelchair.slug && id === wheelchair.id) {
     permanentRedirect(`/${locale}${buildWheelchairPath(wheelchair.slug)}`);
   }
+
+  const publicIdentifier = wheelchair.slug ?? wheelchair.id;
 
   return buildProductMetadata(
     {
       id: wheelchair.id,
-      slug: wheelchair.slug,
+      slug: publicIdentifier,
       name: wheelchair.name,
       nameAr: wheelchair.nameAr,
       description: wheelchair.description,
@@ -75,14 +77,15 @@ export default async function WheelchairDetailPage({ params }: Props) {
   const isAr = locale === "ar";
   const wheelchair = await getPublicWheelchairByIdentifier(id);
 
-  if (!wheelchair || wheelchair.status === "RETIRED" || !wheelchair.slug) {
+  if (!wheelchair || wheelchair.status === "RETIRED") {
     notFound();
   }
 
-  if (id === wheelchair.id) {
+  if (wheelchair.slug && id === wheelchair.id) {
     permanentRedirect(`/${locale}${buildWheelchairPath(wheelchair.slug)}`);
   }
 
+  const publicIdentifier = wheelchair.slug ?? wheelchair.id;
   const name = isAr ? wheelchair.nameAr : wheelchair.name;
   const description = isAr ? wheelchair.descriptionAr : wheelchair.description;
   const features = isAr ? wheelchair.featuresAr : wheelchair.features;
@@ -90,7 +93,7 @@ export default async function WheelchairDetailPage({ params }: Props) {
   const schemas = [
     buildWheelchairProductSchema({
       locale: locale as Locale,
-      slug: wheelchair.slug,
+      slug: publicIdentifier,
       name,
       description,
       imageUrls: wheelchair.images ?? [],
@@ -103,7 +106,7 @@ export default async function WheelchairDetailPage({ params }: Props) {
     buildBreadcrumbSchema(locale as Locale, [
       { name: isAr ? "الرئيسية" : "Home", path: "/" },
       { name: isAr ? "الكراسي المتحركة" : "Wheelchairs", path: "/wheelchairs" },
-      { name, path: buildWheelchairPath(wheelchair.slug) },
+      { name, path: buildWheelchairPath(publicIdentifier) },
     ]),
   ];
 
@@ -235,7 +238,7 @@ export default async function WheelchairDetailPage({ params }: Props) {
 
               {wheelchair.status === "AVAILABLE" ? (
                 <Link
-                  href={`/${locale}${buildWheelchairBookingPath(wheelchair.slug)}`}
+                  href={`/${locale}${buildWheelchairBookingPath(publicIdentifier)}`}
                   className="btn-primary w-full justify-center py-3 text-base"
                 >
                   {isAr ? "📅 احجز الآن" : "📅 Book This Wheelchair"}

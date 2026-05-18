@@ -19,6 +19,7 @@ import { calculateBookingPricing } from "@/lib/pricing";
 import { getSecurityDeposit } from "@/lib/security-deposit";
 import { buildE164Phone, COUNTRY_DIAL_CODES } from "@/lib/phone";
 import { TERMS_VERSION } from "@/lib/terms";
+import { getTermsContent } from "@/lib/terms-content";
 import { logger } from "@sentry/nextjs";
 import {
   DELIVERY_CITIES,
@@ -68,6 +69,7 @@ function PaymentForm({
 }) {
   const stripe = useStripe();
   const elements = useElements();
+  const isAr = locale === "ar";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +104,11 @@ function PaymentForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      className={isAr ? "space-y-4 text-right" : "space-y-4"}
+      dir={isAr ? "rtl" : "ltr"}
+    >
       <PaymentElement />
       {error && (
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>
@@ -112,7 +118,13 @@ function PaymentForm({
         disabled={!stripe || loading}
         className="btn-primary w-full justify-center py-3 text-base"
       >
-        {loading ? "Processing..." : "Pay Now"}
+        {loading
+          ? isAr
+            ? "جاري المعالجة..."
+            : "Processing..."
+          : isAr
+            ? "ادفع الآن"
+            : "Pay Now"}
       </button>
     </form>
   );
@@ -129,6 +141,7 @@ export default function BookPage({
   const { bookingId } = React.use(searchParams);
   const router = useRouter();
   const isAr = locale === "ar";
+  const termsContent = getTermsContent(locale);
 
   const [wheelchair, setWheelchair] = useState<WheelchairInfo | null>(null);
   const [existingBooking, setExistingBooking] =
@@ -462,11 +475,95 @@ export default function BookPage({
   const name = isAr ? wheelchair.nameAr : wheelchair.name;
   const bookingIsPaid = bookingPaymentStatus === "PAID";
   const bookingExpired = bookingPaymentStatus === "EXPIRED";
+  const alignClass = isAr ? "text-right" : "text-left";
+  const fieldClass = `input-field ${isAr ? "text-right" : ""}`;
+  const copy = {
+    title: isAr ? "حجز كرسي متحرك" : "Book Wheelchair",
+    detailsTitle: isAr
+      ? "اختر تواريخ التأجير وتفاصيل التوصيل"
+      : "Select Rental Dates & Delivery Details",
+    fullName: isAr ? "الاسم الكامل" : "Full name",
+    phoneLabel: isAr
+      ? "رقم واتساب / الهاتف"
+      : "Contact WhatsApp / phone number",
+    countryCode: isAr ? "رمز الدولة" : "Country code",
+    phonePlaceholder: isAr ? "رقم التواصل" : "Contact number",
+    phoneHelp: isAr
+      ? "ندعم أرقام الإمارات والأرقام الدولية، ويتم حفظها بصيغة E.164."
+      : "UAE and international numbers are supported and saved in E.164 format.",
+    freeDelivery: isAr ? "توصيل مجاني" : "Free Delivery",
+    paidDelivery: isAr ? "+ 150 درهم رسوم توصيل" : "+ AED 150 Delivery Fee",
+    deliveryHelp: isAr
+      ? "التوصيل مجاني داخل عجمان والشارقة ودبي وأم القيوين. تطبق رسوم إضافية على الإمارات الأخرى."
+      : "Free delivery within Ajman, Sharjah, Dubai & UAQ. Additional fee applies for other emirates.",
+    address: isAr ? "الشارع / المبنى / الشقة" : "Street / building / apartment",
+    notes: isAr
+      ? "الطابق / تعليمات إضافية (اختياري)"
+      : "Floor / instructions (optional)",
+    idCopy: isAr ? "نسخة الهوية" : "ID copy",
+    emiratesId: isAr ? "الهوية الإماراتية" : "Emirates ID",
+    passport: isAr ? "جواز السفر" : "Passport",
+    idHelp: isAr
+      ? "تقبل النسخة الرقمية. الوصول للإدارة فقط، وسيظهر للعميل أن نسخة الهوية تم استلامها."
+      : "Digital copy accepted. Admin-only access; customer view will only show ID copy received.",
+    paymentMethod: isAr ? "طريقة الدفع" : "Payment Method",
+    online: isAr ? "الدفع الإلكتروني (Stripe)" : "ONLINE (Stripe)",
+    cash: isAr ? "الدفع نقدا عند التوصيل" : "CASH on Delivery",
+    termsPrefix: isAr ? "أوافق على " : "I agree to the ",
+    termsLink: isAr ? "الشروط والأحكام" : "Terms & Conditions",
+    termsSuffix: isAr
+      ? " ومتطلبات اتفاقية التأجير."
+      : " and rental agreement requirements.",
+    processing: isAr ? "جاري المعالجة..." : "Processing...",
+    confirmCash: isAr
+      ? "تأكيد الحجز (الدفع عند التوصيل)"
+      : "Confirm Booking (COD)",
+    nextPayment: isAr ? "التالي: الدفع" : "Next: Payment",
+    paymentDetails: isAr ? "تفاصيل الدفع" : "Payment Details",
+    paymentConfirmed: isAr ? "تم تأكيد الدفع!" : "Payment Confirmed!",
+    rentalSet: isAr ? "تم تأكيد طلب التأجير." : "Your rental is all set.",
+    dashboard: isAr ? "الذهاب إلى لوحة التحكم" : "Go to Dashboard",
+    bookingExpired: isAr ? "انتهت صلاحية الحجز" : "Booking expired",
+    bookingExpiredBody: isAr
+      ? "لم يعد هذا الحجز قابلا للدفع. يرجى إنشاء حجز جديد."
+      : "This reservation is no longer payable. Please create a new booking.",
+    startNew: isAr ? "بدء حجز جديد" : "Start New Booking",
+    stripeMissing: isAr
+      ? "Stripe غير مهيأ لهذه البيئة."
+      : "Stripe is not configured for this environment.",
+    paymentLoading: isAr
+      ? "جاري تحميل نموذج الدفع..."
+      : "Loading payment form...",
+    paymentNotReady: isAr
+      ? "لم يتم تهيئة الدفع بعد."
+      : "Payment is not initialized yet.",
+    summary: isAr ? "ملخص الحجز" : "Booking Summary",
+    from: isAr ? "من" : "From",
+    to: isAr ? "إلى" : "To",
+    duration: isAr ? "المدة" : "Duration",
+    days: isAr ? "أيام" : "days",
+    subtotal: isAr ? "المجموع الفرعي" : "Subtotal",
+    deliveryFee: isAr ? "رسوم التوصيل" : "Delivery Fee",
+    vat: isAr ? "ضريبة القيمة المضافة (5%)" : "VAT (5%)",
+    total: isAr ? "الإجمالي" : "Total",
+    deposit: isAr
+      ? "التأمين المسترد عند التوصيل:"
+      : "Refundable security deposit due on delivery:",
+    selectDates: isAr
+      ? "اختر التواريخ لعرض السعر"
+      : "Select dates to see price",
+    termsTitle: isAr ? "الشروط والأحكام" : "Terms & Conditions",
+    version: isAr ? "الإصدار" : "Version",
+    close: isAr ? "إغلاق" : "Close",
+  };
 
   return (
-    <div className="page-container overflow-x-hidden py-6 sm:py-10">
+    <div
+      className={`page-container overflow-x-hidden py-6 sm:py-10 ${alignClass}`}
+      dir={isAr ? "rtl" : "ltr"}
+    >
       <div className="mx-auto max-w-5xl">
-        <h1 className="section-heading mb-2">Book Wheelchair</h1>
+        <h1 className="section-heading mb-2">{copy.title}</h1>
         <p className="mb-8 text-slate-500">{name}</p>
 
         <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
@@ -474,7 +571,7 @@ export default function BookPage({
             {step === "dates" ? (
               <div className="card overflow-hidden p-4 sm:p-6">
                 <h2 className="mb-4 font-semibold text-slate-900">
-                  Select Rental Dates & Delivery Details
+                  {copy.detailsTitle}
                 </h2>
 
                 <style>{`
@@ -500,10 +597,18 @@ export default function BookPage({
                   .rdp-day_selected { background-color: #0369a1 !important; }
                   .rdp-day_range_middle { background-color: #e0f2fe !important; color: #0369a1 !important; }
                   .rdp-button:hover:not([disabled]) { background-color: #f0f9ff; }
+                  .booking-day-picker[dir="rtl"] .rdp-month_caption {
+                    justify-content: center;
+                    text-align: center;
+                  }
+                  .booking-day-picker[dir="rtl"] .rdp-nav {
+                    direction: ltr;
+                  }
                 `}</style>
 
                 <div className="flex w-full justify-center">
                   <DayPicker
+                    dir={isAr ? "rtl" : "ltr"}
                     mode="range"
                     selected={dateRange}
                     onSelect={setDateRange}
@@ -515,23 +620,26 @@ export default function BookPage({
 
                 <div className="mt-5 grid gap-3">
                   <input
-                    className="input-field"
-                    placeholder="Full name"
+                    className={fieldClass}
+                    placeholder={copy.fullName}
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                   />
                   <div className="min-w-0 rounded-xl border border-slate-200 p-3">
                     <p className="mb-2 text-sm font-medium text-slate-700">
-                      Contact WhatsApp / phone number
+                      {copy.phoneLabel}
                     </p>
-                    <div className="grid min-w-0 gap-2 sm:grid-cols-[130px_minmax(0,1fr)]">
+                    <div
+                      className="grid min-w-0 gap-2 sm:grid-cols-[130px_minmax(0,1fr)]"
+                      dir="ltr"
+                    >
                       <div>
                         <input
-                          className="input-field"
+                          className="input-field text-left"
                           list="booking-country-codes"
                           inputMode="tel"
                           placeholder="+971"
-                          aria-label="Country code"
+                          aria-label={copy.countryCode}
                           value={phoneCountryCode}
                           onChange={(e) => setPhoneCountryCode(e.target.value)}
                         />
@@ -547,20 +655,20 @@ export default function BookPage({
                         </datalist>
                       </div>
                       <input
-                        className="input-field min-w-0"
-                        placeholder="Contact number"
+                        className="input-field min-w-0 text-left"
+                        placeholder={copy.phonePlaceholder}
+                        dir="ltr"
                         inputMode="tel"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
                       />
                     </div>
                     <p className="mt-2 text-xs text-slate-500">
-                      UAE and international numbers are supported and saved in
-                      E.164 format.
+                      {copy.phoneHelp}
                     </p>
                   </div>
                   <select
-                    className="input-field"
+                    className={fieldClass}
                     value={deliveryCity}
                     onChange={(e) =>
                       setDeliveryCity(
@@ -568,14 +676,14 @@ export default function BookPage({
                       )
                     }
                   >
-                    <optgroup label="Free Delivery">
+                    <optgroup label={copy.freeDelivery}>
                       {FREE_DELIVERY_CITIES.map((city) => (
                         <option key={city} value={city}>
                           {formatDeliveryCity(city)}
                         </option>
                       ))}
                     </optgroup>
-                    <optgroup label="+ AED 150 Delivery Fee">
+                    <optgroup label={copy.paidDelivery}>
                       {PAID_DELIVERY_CITIES.map((city) => (
                         <option key={city} value={city}>
                           {formatDeliveryCity(city)}
@@ -584,7 +692,7 @@ export default function BookPage({
                     </optgroup>
                   </select>
                   <select
-                    className="input-field"
+                    className={fieldClass}
                     value={deliveryWindow}
                     onChange={(e) =>
                       setDeliveryWindow(
@@ -598,29 +706,26 @@ export default function BookPage({
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-slate-500">
-                    Free delivery within Ajman, Sharjah, Dubai & UAQ. Additional
-                    fee applies for other emirates.
-                  </p>
+                  <p className="text-xs text-slate-500">{copy.deliveryHelp}</p>
                   <textarea
-                    className="input-field min-h-24"
-                    placeholder="Street / building / apartment"
+                    className={`${fieldClass} min-h-24`}
+                    placeholder={copy.address}
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
                   />
                   <textarea
-                    className="input-field min-h-20"
-                    placeholder="Floor / instructions (optional)"
+                    className={`${fieldClass} min-h-20`}
+                    placeholder={copy.notes}
                     value={deliveryNotes}
                     onChange={(e) => setDeliveryNotes(e.target.value)}
                   />
                   <div className="min-w-0 rounded-xl border border-slate-200 p-3">
                     <p className="mb-2 text-sm font-medium text-slate-700">
-                      ID copy
+                      {copy.idCopy}
                     </p>
                     <div className="grid min-w-0 gap-2 sm:grid-cols-[160px_minmax(0,1fr)]">
                       <select
-                        className="input-field"
+                        className={fieldClass}
                         value={idDocumentType}
                         onChange={(e) => {
                           setIdDocumentType(e.target.value as IdDocumentType);
@@ -629,11 +734,11 @@ export default function BookPage({
                           setIdDocumentReceived(false);
                         }}
                       >
-                        <option value="EMIRATES_ID">Emirates ID</option>
-                        <option value="PASSPORT">Passport</option>
+                        <option value="EMIRATES_ID">{copy.emiratesId}</option>
+                        <option value="PASSPORT">{copy.passport}</option>
                       </select>
                       <input
-                        className="input-field min-w-0"
+                        className="input-field min-w-0 max-w-full overflow-hidden file:me-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700"
                         type="file"
                         accept="application/pdf,image/jpeg,image/png,image/webp"
                         onChange={(e) => {
@@ -644,10 +749,7 @@ export default function BookPage({
                         }}
                       />
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                      Digital copy accepted. Admin-only access; customer view
-                      will only show ID copy received.
-                    </p>
+                    <p className="mt-2 text-xs text-slate-500">{copy.idHelp}</p>
                     {/* {idDocumentReceived && (
                       <p className="mt-2 text-xs font-medium text-emerald-700">
                         ID copy received
@@ -656,24 +758,26 @@ export default function BookPage({
                   </div>
                   <div className="rounded-xl border border-slate-200 p-3">
                     <p className="mb-2 text-sm font-medium text-slate-700">
-                      Payment Method
+                      {copy.paymentMethod}
                     </p>
                     <div className="grid gap-2 text-sm sm:grid-cols-2">
-                      <label className="flex items-center gap-2 rounded-lg border border-slate-100 p-2">
+                      <label className="flex min-h-12 items-center gap-2 rounded-lg border border-slate-100 p-3">
                         <input
                           type="radio"
+                          className="shrink-0"
                           checked={paymentMethod === "ONLINE"}
                           onChange={() => setPaymentMethod("ONLINE")}
                         />
-                        ONLINE (Stripe)
+                        <span className="min-w-0 flex-1">{copy.online}</span>
                       </label>
-                      <label className="flex items-center gap-2 rounded-lg border border-slate-100 p-2">
+                      <label className="flex min-h-12 items-center gap-2 rounded-lg border border-slate-100 p-3">
                         <input
                           type="radio"
+                          className="shrink-0"
                           checked={paymentMethod === "CASH"}
                           onChange={() => setPaymentMethod("CASH")}
                         />
-                        CASH on Delivery
+                        <span className="min-w-0 flex-1">{copy.cash}</span>
                       </label>
                     </div>
                   </div>
@@ -686,24 +790,17 @@ export default function BookPage({
                         onChange={(e) => setTermsAccepted(e.target.checked)}
                       />
                       <span>
-                        I agree to the{" "}
+                        {copy.termsPrefix}
                         <button
                           type="button"
                           onClick={() => setTermsOpen(true)}
                           className="font-medium text-primary-700 underline"
                         >
-                          Terms & Conditions
+                          {copy.termsLink}
                         </button>{" "}
-                        and rental agreement requirements.
+                        {copy.termsSuffix}
                       </span>
                     </label>
-                    {/* <button
-                      type="button"
-                      onClick={() => setTermsOpen(true)}
-                      className="mt-2 text-xs font-medium text-primary-700 underline"
-                    >
-                      View terms without leaving this booking
-                    </button> */}
                   </div>
                 </div>
 
@@ -725,53 +822,52 @@ export default function BookPage({
                   className="btn-primary mt-4 w-full justify-center py-3"
                 >
                   {loading || idDocumentUploading
-                    ? "Processing..."
+                    ? copy.processing
                     : paymentMethod === "CASH"
-                      ? "Confirm Booking (COD)"
-                      : "Next: Payment"}
+                      ? copy.confirmCash
+                      : copy.nextPayment}
                 </button>
               </div>
             ) : (
               <div className="card overflow-hidden p-4 sm:p-6">
                 <h2 className="mb-4 font-semibold text-slate-900">
-                  Payment Details
+                  {copy.paymentDetails}
                 </h2>
 
                 {bookingIsPaid ? (
                   <div className="py-8 text-center">
                     <div className="mb-4 text-4xl text-green-500">✅</div>
                     <p className="font-semibold text-green-700">
-                      Payment Confirmed!
+                      {copy.paymentConfirmed}
                     </p>
                     <p className="mb-6 text-sm text-slate-500">
-                      Your rental is all set.
+                      {copy.rentalSet}
                     </p>
                     <button
                       onClick={() => router.push(`/${locale}/dashboard`)}
                       className="btn-primary w-full justify-center"
                     >
-                      Go to Dashboard
+                      {copy.dashboard}
                     </button>
                   </div>
                 ) : bookingExpired ? (
                   <div className="space-y-4 py-8 text-center">
                     <p className="font-semibold text-slate-900">
-                      Booking expired
+                      {copy.bookingExpired}
                     </p>
                     <p className="text-sm text-slate-500">
-                      This reservation is no longer payable. Please create a new
-                      booking.
+                      {copy.bookingExpiredBody}
                     </p>
                     <button
                       onClick={() => router.push(`/${locale}${bookingPath}`)}
                       className="btn-outline w-full justify-center"
                     >
-                      Start New Booking
+                      {copy.startNew}
                     </button>
                   </div>
                 ) : !stripePromise ? (
                   <div className="space-y-4 py-8 text-center text-red-600">
-                    <p>Stripe is not configured for this environment.</p>
+                    <p>{copy.stripeMissing}</p>
                   </div>
                 ) : clientSecret && bookingIdState ? (
                   <Elements
@@ -783,9 +879,7 @@ export default function BookPage({
                 ) : (
                   <div className="space-y-4 py-8 text-center text-slate-400">
                     <p>
-                      {loading
-                        ? "Loading payment form..."
-                        : "Payment is not initialized yet."}
+                      {loading ? copy.paymentLoading : copy.paymentNotReady}
                     </p>
                   </div>
                 )}
@@ -794,14 +888,16 @@ export default function BookPage({
           </div>
 
           <div className="min-w-0">
-            <div className="card p-4 sm:p-5 lg:sticky lg:top-24">
+            <div
+              className={`card p-4 sm:p-5 lg:sticky lg:top-24 ${alignClass}`}
+            >
               <h3 className="mb-4 font-semibold text-slate-900">
-                Booking Summary
+                {copy.summary}
               </h3>
 
               <div className="mb-4 rounded-xl bg-slate-50 p-4">
                 <p className="text-sm font-medium text-slate-900">{name}</p>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-slate-400" dir="ltr">
                   {formatAED(Number(wheelchair.pricePerDay))}/day
                 </p>
               </div>
@@ -809,42 +905,46 @@ export default function BookPage({
               {dateRange?.from && dateRange?.to ? (
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">From</span>
-                    <span className="font-medium">
+                    <span className="text-slate-500">{copy.from}</span>
+                    <span className="font-medium" dir="ltr">
                       {format(dateRange.from, "MMM d, yyyy")}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">To</span>
-                    <span className="font-medium">
+                    <span className="text-slate-500">{copy.to}</span>
+                    <span className="font-medium" dir="ltr">
                       {format(dateRange.to, "MMM d, yyyy")}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Duration</span>
-                    <span className="font-medium">{days} days</span>
+                    <span className="text-slate-500">{copy.duration}</span>
+                    <span className="font-medium" dir="ltr">
+                      {days} {copy.days}
+                    </span>
                   </div>
                   <hr className="my-2 border-slate-100" />
                   <div className="flex justify-between text-xs text-slate-500">
-                    <span>Subtotal</span>
-                    <span>{formatAED(subtotal)}</span>
+                    <span>{copy.subtotal}</span>
+                    <span dir="ltr">{formatAED(subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-xs text-slate-500">
-                    <span>Delivery Fee</span>
-                    <span>{formatAED(activeDeliveryFee)}</span>
+                    <span>{copy.deliveryFee}</span>
+                    <span dir="ltr">{formatAED(activeDeliveryFee)}</span>
                   </div>
                   <div className="flex justify-between text-xs text-slate-500">
-                    <span>VAT (5%)</span>
-                    <span>{formatAED(tax)}</span>
+                    <span>{copy.vat}</span>
+                    <span dir="ltr">{formatAED(tax)}</span>
                   </div>
                   <hr className="my-2 border-slate-100" />
                   <div className="flex justify-between text-base font-bold">
-                    <span>Total</span>
-                    <span className="text-primary-700">{formatAED(total)}</span>
+                    <span>{copy.total}</span>
+                    <span className="text-primary-700" dir="ltr">
+                      {formatAED(total)}
+                    </span>
                   </div>
                   <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
-                    Refundable security deposit due on delivery:{" "}
-                    <span className="font-semibold">
+                    {copy.deposit}{" "}
+                    <span className="font-semibold" dir="ltr">
                       {formatAED(activeSecurityDeposit)}
                     </span>
                   </div>
@@ -852,8 +952,8 @@ export default function BookPage({
               ) : existingBooking ? (
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">From</span>
-                    <span className="font-medium">
+                    <span className="text-slate-500">{copy.from}</span>
+                    <span className="font-medium" dir="ltr">
                       {format(
                         new Date(existingBooking.startDate),
                         "MMM d, yyyy",
@@ -861,45 +961,47 @@ export default function BookPage({
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">To</span>
-                    <span className="font-medium">
+                    <span className="text-slate-500">{copy.to}</span>
+                    <span className="font-medium" dir="ltr">
                       {format(new Date(existingBooking.endDate), "MMM d, yyyy")}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Duration</span>
-                    <span className="font-medium">
-                      {existingBooking.totalDays} days
+                    <span className="text-slate-500">{copy.duration}</span>
+                    <span className="font-medium" dir="ltr">
+                      {existingBooking.totalDays} {copy.days}
                     </span>
                   </div>
                   <hr className="my-2 border-slate-100" />
                   <div className="flex justify-between text-xs text-slate-500">
-                    <span>Subtotal</span>
-                    <span>{formatAED(subtotal)}</span>
+                    <span>{copy.subtotal}</span>
+                    <span dir="ltr">{formatAED(subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-xs text-slate-500">
-                    <span>Delivery Fee</span>
-                    <span>{formatAED(activeDeliveryFee)}</span>
+                    <span>{copy.deliveryFee}</span>
+                    <span dir="ltr">{formatAED(activeDeliveryFee)}</span>
                   </div>
                   <div className="flex justify-between text-xs text-slate-500">
-                    <span>VAT (5%)</span>
-                    <span>{formatAED(tax)}</span>
+                    <span>{copy.vat}</span>
+                    <span dir="ltr">{formatAED(tax)}</span>
                   </div>
                   <hr className="my-2 border-slate-100" />
                   <div className="flex justify-between text-base font-bold">
-                    <span>Total</span>
-                    <span className="text-primary-700">{formatAED(total)}</span>
+                    <span>{copy.total}</span>
+                    <span className="text-primary-700" dir="ltr">
+                      {formatAED(total)}
+                    </span>
                   </div>
                   <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
-                    Refundable security deposit due on delivery:{" "}
-                    <span className="font-semibold">
+                    {copy.deposit}{" "}
+                    <span className="font-semibold" dir="ltr">
                       {formatAED(activeSecurityDeposit)}
                     </span>
                   </div>
                 </div>
               ) : (
                 <p className="py-4 text-center text-sm text-slate-400">
-                  Select dates to see price
+                  {copy.selectDates}
                 </p>
               )}
             </div>
@@ -914,17 +1016,20 @@ export default function BookPage({
           aria-modal="true"
           aria-labelledby="booking-terms-title"
         >
-          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:mx-auto sm:max-w-2xl sm:rounded-2xl sm:p-5">
-            <div className="mb-4 flex items-start justify-between gap-4">
+          <div
+            className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:mx-auto sm:max-w-2xl sm:rounded-2xl ${alignClass}`}
+            dir={isAr ? "rtl" : "ltr"}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-4 sm:p-5">
               <div>
                 <h2
                   id="booking-terms-title"
                   className="font-semibold text-slate-900"
                 >
-                  Terms & Conditions
+                  {copy.termsTitle}
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  Version {TERMS_VERSION}
+                  {copy.version} <span dir="ltr">{TERMS_VERSION}</span>
                 </p>
               </div>
               <button
@@ -932,30 +1037,39 @@ export default function BookPage({
                 onClick={() => setTermsOpen(false)}
                 className="rounded-lg border border-slate-200 px-3 py-1 text-sm"
               >
-                Close
+                {copy.close}
               </button>
             </div>
-            <div className="space-y-3 text-sm leading-6 text-slate-600">
-              <p>
-                UAE residents and tourists are accepted. Customers must be 18+
-                and provide a digital Emirates ID or Passport copy.
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+              <p className="mb-5 text-sm leading-6 text-slate-500">
+                {termsContent.intro}
               </p>
-              <p>
-                Please provide a reachable contact number. Admin confirmation,
-                where needed, is normally completed within 24 hours. Delivery
-                windows are estimates.
-              </p>
-              <p>
-                The refundable security deposit is collected upon delivery and
-                refunded after pickup and inspection, normally within 24 to 72
-                hours. Damage, loss, theft, missing accessories, lost chargers,
-                or battery damage may be deducted.
-              </p>
-              <p>
-                You must sign the rental agreement upon delivery. Full legal
-                terms remain available on the dedicated Terms & Conditions page
-                outside the booking flow.
-              </p>
+              <ol className="space-y-5">
+                {termsContent.sections.map((section, sectionIndex) => (
+                  <li key={section.title}>
+                    <h3 className="mb-2 text-sm font-semibold text-slate-900">
+                      <span dir="ltr" className="inline-block">
+                        {sectionIndex + 1}.
+                      </span>{" "}
+                      {section.title}
+                    </h3>
+                    <ul
+                      className={`space-y-2 text-sm leading-6 text-slate-600 ${
+                        isAr ? "pr-5" : "pl-5"
+                      }`}
+                    >
+                      {section.items.map((item) => (
+                        <li
+                          key={item}
+                          className="list-disc rounded-lg bg-slate-50 p-3 marker:text-primary-600"
+                        >
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
         </div>

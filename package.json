@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
+    "wheelchairs:backfill-slugs": "tsx scripts/backfill-wheelchair-slugs.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

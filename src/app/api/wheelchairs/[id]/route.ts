@@ -38,7 +38,7 @@ export const PUT = withAdminAuth(async (req, { params }) => {
     const { updatedAt: clientUpdatedAt, ...rest } = body;
 
     if (!clientUpdatedAt) {
-      return badRequest("Missing updatedAt for conflict detection");
+      return badRequest("Please refresh this wheelchair and try again.");
     }
 
     // Check for concurrent edit before validating the rest
