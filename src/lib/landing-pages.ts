@@ -18,26 +18,42 @@ export type LandingImageKey =
   | "stroller";
 
 export const landingImages: Record<LandingImageKey, string> = {
-  dubai: "/Landing/dubai-wheelchair.jfif",
-  airport: "/Landing/airport-wheelchair.jfif",
-  surgery: "/Landing/post-surgery-wheelchair.jfif",
-  arabic: "/Landing/uae-wheelchair.jfif",
-  manual: "/Landing/manual-wheelchair.jfif",
-  electric: "/Landing/electric-wheelchair.jfif",
-  scooter: "/Landing/mobility-scooter.jfif",
-  walker: "/Landing/walker.jfif",
-  stroller: "/Landing/stroller.jfif",
+  dubai:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/Advanced_Electric_Wheelchair_d5ykpr.jpg",
+  airport:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/Foldable_scooter_r1yyjb.jpg",
+  surgery:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/post-surgery-wheelchair_e0t327.jpg",
+  arabic:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/uae-wheelchair_etghlm.jpg",
+  manual:
+    "/https://res.cloudinary.com/drzmzitiv/image/upload/manual-wheelchair_tas8c6.jpg",
+  electric:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/electric-wheelchair_naphau.jpg",
+  scooter:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/mobility-scooter_r4optl.jpg",
+  walker: "https://res.cloudinary.com/drzmzitiv/image/upload/walker_avcrhe.jpg",
+  stroller:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/Stroller_j5qucg.jpg",
 };
 
 export const landingImageFallbacks: Partial<Record<LandingImageKey, string>> = {
-  dubai: "/landing/Manual Wheelchair.jfif",
-  airport: "/landing/Foldable scooter.jfif",
-  surgery: "/landing/Electric Wheelchair.jfif",
-  arabic: "/landing/Manual Wheelchair.jfif",
-  manual: "/landing/Manual Wheelchair.jfif",
-  electric: "/landing/Electric Wheelchair.jfif",
-  scooter: "/landing/Electric Scooter.jfif",
-  stroller: "/landing/Stroller.jfif",
+  dubai:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/Advanced_Electric_Wheelchair_d5ykpr.jpg",
+  airport:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/Foldable_scooter_r1yyjb.jpg",
+  surgery:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/post-surgery-wheelchair_e0t327.jpg",
+  arabic:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/uae-wheelchair_etghlm.jpg",
+  manual:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/manual-wheelchair_tas8c6.jpg",
+  electric:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/electric-wheelchair_naphau.jpg",
+  scooter:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/mobility-scooter_r4optl.jpg",
+  stroller:
+    "https://res.cloudinary.com/drzmzitiv/image/upload/Stroller_j5qucg.jpg",
 };
 
 export function getLandingImageSources(key: LandingImageKey) {
@@ -144,7 +160,8 @@ const arabicTrustBadges = [
 const englishEquipment: LandingEquipmentItem[] = [
   {
     title: "Manual wheelchairs",
-    description: "Lightweight options for home, hotel, clinic, and short outings.",
+    description:
+      "Lightweight options for home, hotel, clinic, and short outings.",
     imageKey: "manual",
   },
   {
@@ -387,7 +404,8 @@ export const landingPages: Record<LandingPageKey, LandingPageData> = {
     idTitle: "ID requirement",
     idItems: englishIdItems,
     coverageTitle: "Delivery coverage",
-    coverageSubtitle: "BioMobility supports major UAE cities with delivery and pickup.",
+    coverageSubtitle:
+      "BioMobility supports major UAE cities with delivery and pickup.",
     coverageCities: englishCoverage,
     faqTitle: "Frequently asked questions",
     faqs: englishFaqs,
@@ -420,7 +438,8 @@ export const landingPages: Record<LandingPageKey, LandingPageData> = {
       primaryCta: "Rent for Your Dubai Trip",
       secondaryCta: "WhatsApp / Call Now",
       imageKey: "airport",
-      imageAlt: "Wheelchair rental for Dubai airport arrivals and hotel delivery",
+      imageAlt:
+        "Wheelchair rental for Dubai airport arrivals and hotel delivery",
     },
     trustBadges: englishTrustBadges,
     problem: {
@@ -577,19 +596,23 @@ export const landingPages: Record<LandingPageKey, LandingPageData> = {
     faqs: arabicFaqs,
     finalCta: {
       title: "هل تحتاج إلى كرسي متحرك في الإمارات؟",
-      subtitle:
-        "احجز الآن أو تواصل معنا لترتيب التوصيل السريع والدعم المناسب.",
+      subtitle: "احجز الآن أو تواصل معنا لترتيب التوصيل السريع والدعم المناسب.",
       primaryCta: "احجز الآن",
       secondaryCta: "اتصل أو واتساب",
     },
   },
 };
 
-function landingAlternates(data: LandingPageData): NonNullable<Metadata["alternates"]> {
+function landingAlternates(
+  data: LandingPageData,
+): NonNullable<Metadata["alternates"]> {
   const canonical = buildLocalizedUrl(data.locale, data.pathname);
   const languages: Record<string, string> = {
     [data.locale === "ar" ? "ar-AE" : "en-AE"]: canonical,
-    "x-default": data.locale === "en" ? canonical : buildLocalizedUrl("en", "/landing/wheelchair-rental-dubai"),
+    "x-default":
+      data.locale === "en"
+        ? canonical
+        : buildLocalizedUrl("en", "/landing/wheelchair-rental-dubai"),
   };
 
   if (data.alternatePathname?.en) {
@@ -605,7 +628,8 @@ function landingAlternates(data: LandingPageData): NonNullable<Metadata["alterna
 
 export function buildLandingMetadata(data: LandingPageData): Metadata {
   const image =
-    encodeURI(absoluteUrl(landingImages[data.hero.imageKey])) || DEFAULT_OG_IMAGE;
+    encodeURI(absoluteUrl(landingImages[data.hero.imageKey])) ||
+    DEFAULT_OG_IMAGE;
 
   return {
     title: data.title,
@@ -642,7 +666,8 @@ export function buildLandingMetadata(data: LandingPageData): Metadata {
 export function buildLandingSchemas(data: LandingPageData) {
   const pageUrl = buildLocalizedUrl(data.locale, data.pathname);
   const image =
-    encodeURI(absoluteUrl(landingImages[data.hero.imageKey])) || DEFAULT_OG_IMAGE;
+    encodeURI(absoluteUrl(landingImages[data.hero.imageKey])) ||
+    DEFAULT_OG_IMAGE;
 
   return [
     {
@@ -715,7 +740,8 @@ export function buildLandingSchemas(data: LandingPageData) {
         {
           "@type": "ListItem",
           position: 2,
-          name: data.locale === "ar" ? "تأجير كراسي متحركة" : "Wheelchair rental",
+          name:
+            data.locale === "ar" ? "تأجير كراسي متحركة" : "Wheelchair rental",
           item: pageUrl,
         },
       ],
